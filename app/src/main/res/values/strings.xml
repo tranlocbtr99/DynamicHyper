@@ -1,0 +1,43 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="app_name">Dynamic Hyper</string>
+    <string name="service_name">Dynamic Hyper Focus Service</string>
+
+    <!-- Liquid Glass UI Strings -->
+    <string name="dashboard_title">Dynamic Hyper</string>
+    <string name="dashboard_subtitle">Trải nghiệm Đảo Động Đỉnh Cao cho HyperOS</string>
+    <string name="status_active">Đang Hoạt Động</string>
+    <string name="status_inactive">Chưa Kích Hoạt</string>
+
+    <string name="btn_one_click_activate">Kích Hoạt 1 Chạm</string>
+    <string name="btn_one_click_desc">Tự động cấp quyền chạy ngầm, mở khóa ROM nội địa &amp; bật Đảo Động</string>
+
+    <string name="section_island_settings">Cấu Hình Đảo Động</string>
+    <string name="idle_island_title">Đảo Trạng Thái Chờ (24/7)</string>
+    <string name="idle_island_desc">Ghim viên thuốc tinh tế che nốt ruồi camera liên tục cả khi mở khóa và màn hình khóa</string>
+    <string name="idle_island_width">Độ rộng viên thuốc</string>
+
+    <string name="media_island_title">Đảo Nghe Nhạc (Media)</string>
+    <string name="media_island_desc">Hiển thị bìa album, tên bài hát và sóng nhạc chuyển động</string>
+
+    <string name="charging_island_title">Đảo Sạc Pin Siêu Tốc</string>
+    <string name="charging_island_desc">Hiển thị công suất sạc (Watt) và % pin thời gian thực</string>
+
+    <string name="zalo_island_title">Tin Nhắn Zalo &amp; Messenger</string>
+    <string name="zalo_island_desc">Hiển thị avatar người gửi và nút Trả lời nhanh</string>
+
+    <string name="section_activation_mode">Chế Độ Mở Khóa ROM Nội Địa</string>
+    <string name="activation_adb_title">Ghép Nối ADB Không Dây (Không cần Shizuku)</string>
+    <string name="activation_adb_desc">Nhập Port và Mã 6 số từ Gỡ lỗi Wi-Fi để kích hoạt trực tiếp</string>
+
+    <string name="activation_shizuku_title">Kích Hoạt Qua Shizuku (Nếu có)</string>
+    <string name="activation_shizuku_desc">Tự động nhận diện Shizuku 1-chạm để mở khóa vĩnh viễn</string>
+
+    <string name="pair_dialog_title">Ghép Nối Gỡ Lỗi Wi-Fi</string>
+    <string name="pair_port_label">Cổng (Port)</string>
+    <string name="pair_code_label">Mã ghép nối (6 số)</string>
+    <string name="btn_pair">Ghép Nối &amp; Kích Hoạt</string>
+    <string name="btn_cancel">Hủy</string>
+
+    <string name="msg_opt_success">Đã kích hoạt Dynamic Hyper thành công! Đảo Động đang hoạt động.</string>
+</resources>
+
