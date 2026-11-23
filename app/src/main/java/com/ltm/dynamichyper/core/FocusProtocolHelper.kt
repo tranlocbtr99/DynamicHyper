@@ -50,16 +50,24 @@ object FocusProtocolHelper {
         smallIconRes: Int,
         jsonParam: String,
         pics: Map<String, Bitmap> = emptyMap(),
-        isOngoing: Boolean = true
+        isOngoing: Boolean = true,
+        onlyAlertOnce: Boolean = true,
+        priority: Int = NotificationCompat.PRIORITY_HIGH,
+        contentIntent: android.app.PendingIntent? = null,
+        actionsMap: Map<String, Any> = emptyMap()
     ): Notification {
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(smallIconRes)
             .setContentTitle(title)
             .setContentText(content)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(priority)
             .setOngoing(isOngoing)
-            .setOnlyAlertOnce(true)
+            .setOnlyAlertOnce(onlyAlertOnce)
             .setSilent(true)
+
+        if (contentIntent != null) {
+            builder.setContentIntent(contentIntent)
+        }
 
         // Build miui.focus.pics bundle
         if (pics.isNotEmpty()) {
@@ -72,11 +80,28 @@ object FocusProtocolHelper {
             builder.addExtras(resourceBundle)
         }
 
+        // Build miui.focus.actions bundle for Action Buttons & Quick Reply
+        if (actionsMap.isNotEmpty()) {
+            val actionsBundle = Bundle()
+            for ((key, act) in actionsMap) {
+                when (act) {
+                    is Notification.Action -> actionsBundle.putParcelable(key, act)
+                    is android.app.PendingIntent -> actionsBundle.putParcelable(key, act)
+                }
+            }
+            val actResourceBundle = Bundle()
+            actResourceBundle.putBundle("miui.focus.actions", actionsBundle)
+            builder.addExtras(actResourceBundle)
+        }
+
         // Dynamically adjust islandProperty for Lockscreen / Unlocked
         val targetIslandProperty = if (isKeyguardLocked(context)) KEYGUARD_ISLAND_PROPERTY else UNLOCKED_ISLAND_PROPERTY
         val patchedJson = patchIslandProperty(jsonParam, targetIslandProperty)
 
         val notif = builder.build()
+        if (isOngoing) {
+            notif.flags = notif.flags or Notification.FLAG_ONGOING_EVENT or Notification.FLAG_NO_CLEAR
+        }
         notif.extras.putString("miui.focus.param", patchedJson)
         return notif
     }

@@ -14,6 +14,7 @@ val GlassBorderSubtle = Color(0x1AFFFFFF)
 // Apple Accent Colors
 val AppleBlue = Color(0xFF0A84FF)
 val AppleTeal = Color(0xFF30D158)
+val AppleGreen = Color(0xFF34C759)
 val AppleIndigo = Color(0xFF5E5CE6)
 val ApplePurple = Color(0xFFBF5AF2)
 val ApplePink = Color(0xFFFF375F)

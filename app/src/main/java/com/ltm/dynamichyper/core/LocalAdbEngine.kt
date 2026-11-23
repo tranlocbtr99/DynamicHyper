@@ -37,7 +37,7 @@ object LocalAdbEngine {
     fun getAdbCommandScript(context: Context): String {
         val pkg = context.packageName
         return """
-            cmd notification allow_listener $pkg/com.ltm.dynamichyper.core.DynamicNotificationService
+            cmd notification allow_listener $pkg/com.ltm.dynamichyper.service.DynamicNotificationService
             dumpsys deviceidle whitelist +$pkg
             cmd appops set $pkg AUTO_START allow
             cmd appops set $pkg 10008 allow

@@ -1,0 +1,112 @@
+package com.ltm.dynamichyper.feature.islands
+
+import android.app.Notification
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.service.notification.StatusBarNotification
+import android.util.Log
+import androidx.core.app.NotificationManagerCompat
+import com.ltm.dynamichyper.R
+import com.ltm.dynamichyper.core.FocusProtocolHelper
+
+/**
+ * Quản lý Đảo Quay Màn Hình cho Xiaomi HyperOS (com.miui.screenrecorder)
+ */
+object ScreenRecordingIslandManager {
+    private const val TAG = "DynamicHyper:Record"
+    const val RECORDING_NOTIFICATION_ID = 8888
+    private const val PIC_RED_DOT = "screen_recording_dot"
+
+    fun isScreenRecordingNotification(sbn: StatusBarNotification): Boolean {
+        return sbn.packageName == "com.miui.screenrecorder" &&
+                (sbn.notification.flags and Notification.FLAG_GROUP_SUMMARY) == 0 &&
+                sbn.isOngoing
+    }
+
+    fun showRecordingIsland(context: Context) {
+        try {
+            val jsonParam = """
+            {
+              "param_v2": {
+                "protocol": 3,
+                "business": "dynamic_hyper_screen_record",
+                "updatable": true,
+                "ticker": "Đang quay màn hình",
+                "enableFloat": true,
+                "isShowNotification": true,
+                "islandFirstFloat": true,
+                "reopen": true,
+                "param_island": {
+                  "islandProperty": 1,
+                  "islandPriority": 3,
+                  "islandTimeout": 86400,
+                  "islandOrder": false,
+                  "dismissIsland": false,
+                  "maxSize": false,
+                  "needCloseAnimation": true,
+                  "highlightColor": "#FF3B30",
+                  "bigIslandArea": {
+                    "imageTextInfoLeft": {
+                      "type": 1,
+                      "picInfo": {
+                        "type": 1,
+                        "pic": "miui.focus.pic_$PIC_RED_DOT"
+                      },
+                      "textInfo": {
+                        "title": "Quay màn hình",
+                        "content": "Đang ghi hình...",
+                        "showHighlightColor": true
+                      }
+                    }
+                  },
+                  "smallIslandArea": {
+                    "picInfo": {
+                      "type": 1,
+                      "pic": "miui.focus.pic_$PIC_RED_DOT"
+                    }
+                  }
+                }
+              },
+              "isShowNotification": true
+            }
+            """.trimIndent()
+
+            val redDotBmp = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888).apply {
+                val canvas = Canvas(this)
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = Color.parseColor("#FF3B30")
+                }
+                canvas.drawCircle(48f, 48f, 40f, paint)
+            }
+
+            val pics = mapOf(PIC_RED_DOT to redDotBmp)
+
+            val notification = FocusProtocolHelper.buildFocusNotification(
+                context = context,
+                title = "Đang quay màn hình",
+                content = "Nhấn để dừng hoặc xem chi tiết",
+                smallIconRes = R.drawable.ic_launcher_foreground,
+                jsonParam = jsonParam,
+                pics = pics,
+                isOngoing = true
+            )
+
+            NotificationManagerCompat.from(context).notify(RECORDING_NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to show recording island: ${e.message}")
+        }
+    }
+
+    fun hideRecordingIsland(context: Context) {
+        try {
+            NotificationManagerCompat.from(context).cancel(RECORDING_NOTIFICATION_ID)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to hide recording island: ${e.message}")
+        }
+        // Tự động khôi phục Đảo Chờ ngay sau khi dừng quay màn hình
+        IdleIslandManager.reassertStatic()
+    }
+}

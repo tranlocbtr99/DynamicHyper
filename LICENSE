@@ -1,0 +1,58 @@
+PROPRIETARY SOFTWARE LICENSE & COPYRIGHT NOTICE
+BẢN QUYỀN VÀ ĐIỀU KHOẢN SỞ HỮU TRÍ TUỆ PHẦN MỀM ĐỘC QUYỀN
+
+Copyright (c) 2026 Trần Minh Lộc (tranlocbtr99@gmail.com).
+All rights reserved. / Bảo lưu mọi quyền.
+
+================================================================================
+TIẾNG VIỆT (VIETNAMESE)
+================================================================================
+Phần mềm này cùng toàn bộ mã nguồn, tài nguyên thiết kế, hình ảnh, biểu tượng, 
+giao diện người dùng và tài liệu đi kèm ("Phần mềm - Dynamic Hyper") là tài sản 
+trí tuệ độc quyền và thuộc quyền sở hữu duy nhất của tác giả Trần Minh Lộc.
+
+BẤT KỲ CÁ NHÂN HOẶC TỔ CHỨC NÀO MUỐN SỬ DỤNG, TRÍCH XUẤT, SAO CHÉP, PHÂN PHỐI, 
+CHUYỂN GIAO HOẶC PHÁT TRIỂN PHÁI SINH TỪ PHẦN MỀM NÀY ĐỀU PHẢI ĐƯỢC SỰ CHO PHÉP 
+VÀ ĐỒNG Ý CHÍNH THỨC BẰNG VĂN BẢN TỪ TÁC GIẢ.
+
+CÁC HÀNH VI BỊ NGHIÊM CẤM NẾU CHƯA CÓ VĂN BẢN ĐỒNG Ý TỪ TÁC GIẢ:
+1. Sao chép, nhân bản một phần hoặc toàn bộ mã nguồn, kiến trúc phần mềm, cấu trúc dữ liệu.
+2. Trích xuất mã nguồn, thành phần giao diện Kính Lỏng (Liquid Glass UI), thuật toán điều khiển 
+   Đảo Động hoặc các hiệu ứng đồ họa để sử dụng trong bất kỳ dự án hay sản phẩm nào khác 
+   (bao gồm cả mục đích thương mại lẫn phi thương mại).
+3. Đảo ngược mã nguồn (reverse engineering), dịch ngược (decompilation), dịch tách mã (disassembly), 
+   hoặc cố gắng khám phá cấu trúc mã nguồn từ các bản dựng nhị phân (APK/AAB).
+4. Thay đổi, xóa bỏ thông tin bản quyền, giấy phép, nhãn hiệu hoặc phát hành lại dưới bất kỳ tên gọi nào khác.
+5. Mua bán, cho thuê, thương mại hóa, nhượng quyền sử dụng hoặc phân phối lại trên các kho ứng dụng 
+   khi chưa có văn bản ủy quyền hợp pháp.
+
+Mọi yêu cầu cấp phép sử dụng, thương thảo hợp tác xin vui lòng liên hệ trực tiếp:
+- Tác giả: Trần Minh Lộc
+- Email: tranlocbtr99@gmail.com
+- GitHub: https://github.com/tranlocbtr99
+- Địa chỉ dự án: https://github.com/tranlocbtr99/DynamicHyper
+
+================================================================================
+ENGLISH
+================================================================================
+This software, including all source code, architecture, design assets, icons, 
+user interface components, and documentation ("Software - Dynamic Hyper"), 
+is the proprietary intellectual property and exclusive property of Tran Minh Loc.
+
+ANY USE, EXTRACTION, DUPLICATION, MODIFICATION, REDISTRIBUTION, SUB-LICENSING, 
+OR CREATION OF DERIVATIVE WORKS FROM THIS SOFTWARE REQUIRES PRIOR EXPRESS 
+WRITTEN CONSENT FROM THE AUTHOR.
+
+STRICTLY PROHIBITED ACTIONS WITHOUT PRIOR WRITTEN PERMISSION:
+1. Copying, duplicating, or reproducing any portion or entirety of this codebase.
+2. Extracting source code, Liquid Glass UI components, dynamic island controllers, 
+   or visual assets for use in other projects (commercial or non-commercial).
+3. Reverse engineering, decompiling, disassembling, or deriving source code from binaries.
+4. Removing, modifying, or obscuring proprietary notices, copyright labels, or branding.
+5. Selling, sublicensing, renting, packaging, or commercially exploiting this software.
+
+For licensing requests, permissions, or business inquiries, please contact:
+- Author: Tran Minh Loc
+- Email: tranlocbtr99@gmail.com
+- GitHub: https://github.com/tranlocbtr99
+- Repository: https://github.com/tranlocbtr99/DynamicHyper

@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".DynamicHyperApp"
@@ -37,7 +38,7 @@
 
         <!-- Core Notification Listener Service (Immune to Task swipes with stopWithTask=false) -->
         <service
-            android:name=".core.DynamicNotificationService"
+            android:name=".service.DynamicNotificationService"
             android:exported="true"
             android:stopWithTask="false"
             android:label="@string/service_name"
@@ -49,7 +50,7 @@
 
         <!-- Keep-Alive Receiver for Instant Rebind on Screen Unlock & Power -->
         <receiver
-            android:name=".core.KeepAliveReceiver"
+            android:name=".service.KeepAliveReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -58,6 +59,26 @@
                 <action android:name="android.intent.action.ACTION_POWER_CONNECTED" />
             </intent-filter>
         </receiver>
+
+        <!-- Dynamic Hyper iOS Liquid Glass Inline Reply Receiver & Overlay Service -->
+        <receiver
+            android:name=".feature.reply.InlineReplyReceiver"
+            android:exported="true" />
+
+        <service
+            android:name=".feature.reply.InlineReplyService"
+            android:exported="false" />
+
+        <!-- FileProvider for In-App OTA Update APK Installation -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.ltm.dynamichyper.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- Shizuku Provider Integration -->
         <provider

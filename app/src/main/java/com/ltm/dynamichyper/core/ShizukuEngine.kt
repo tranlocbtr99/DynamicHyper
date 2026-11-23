@@ -54,13 +54,15 @@ object ShizukuEngine {
             )
             method.isAccessible = true
             val process = method.invoke(null, arrayOf("sh", "-c", command), null, null) as Process
-            val reader = BufferedReader(InputStreamReader(process.inputStream))
             val output = StringBuilder()
-            var line: String?
-            while (reader.readLine().also { line = it } != null) {
-                output.append(line).append("\n")
+            process.inputStream.bufferedReader().use { reader ->
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    output.append(line).append("\n")
+                }
             }
             val exitCode = process.waitFor()
+            process.destroy()
             Pair(exitCode, output.toString().trim())
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to exec: $command", e)
@@ -74,7 +76,7 @@ object ShizukuEngine {
     fun applyOneTouchOptimizations(context: Context): Boolean {
         val packageName = context.packageName
         val commands = listOf(
-            "cmd notification allow_listener $packageName/com.ltm.dynamichyper.core.DynamicNotificationService",
+            "cmd notification allow_listener $packageName/com.ltm.dynamichyper.service.DynamicNotificationService",
             "dumpsys deviceidle whitelist +$packageName",
             "cmd appops set $packageName AUTO_START allow",
             "cmd appops set $packageName 10008 allow",
@@ -96,23 +98,39 @@ object ShizukuEngine {
     }
 
     /**
-     * Chặn mạng UID com.xiaomi.xmsf để Focus Island không bao giờ bị thu hồi
+     * Chặn mạng com.xiaomi.xmsf qua chuẩn Connectivity Chain 3 để HyperOS cho phép Focus Island
      */
     fun applyXmsfBypass(): Boolean {
-        val getUidCmd = "pm list packages -U com.xiaomi.xmsf"
-        val (_, out) = execCommand(getUidCmd)
-        val uidRegex = Regex("uid:(\\d+)")
-        val match = uidRegex.find(out)
-        val uid = match?.groupValues?.get(1)?.toIntOrNull()
+        val (c1, _) = execCommand("cmd connectivity set-chain3-enabled true")
+        val (c2, _) = execCommand("cmd connectivity set-package-networking-enabled false com.xiaomi.xmsf")
+        val success = c1 == 0 && c2 == 0
+        Log.i(TAG, "Applied HyperOS XMSF Bypass via Connectivity chain3: $success")
+        return success
+    }
 
-        return if (uid != null && uid > 0) {
-            val blockCmd = "cmd netpolicy add restrict-background-whitelist $uid; cmd connectivity set-uid-firewall-rule 9 $uid 2; cmd connectivity set-uid-firewall-rule 1 $uid 2"
-            val (code, _) = execCommand(blockCmd)
-            Log.i(TAG, "XMSF UID $uid blocked successfully: ${code == 0}")
-            code == 0
-        } else {
-            Log.w(TAG, "Could not find UID for com.xiaomi.xmsf")
-            false
+    /**
+     * Bật / Tắt chặn màn hình bung toàn màn hình khi cuộc gọi đến
+     * Giúp giữ cuộc gọi gọn gàng trên Đảo Động, không gián đoạn app đang dùng
+     */
+    fun setFullScreenCallBlocked(packageName: String, blocked: Boolean): Boolean {
+        val mode = if (blocked) "ignore" else "allow"
+        val (code, _) = execCommand("cmd appops set $packageName USE_FULL_SCREEN_INTENT $mode")
+        return code == 0
+    }
+
+    fun blockAllFullScreenCalls(blocked: Boolean): Boolean {
+        val callApps = listOf(
+            "com.zing.zalo",
+            "com.facebook.orca",
+            "org.telegram.messenger",
+            "com.whatsapp"
+        )
+        var allSuccess = true
+        for (pkg in callApps) {
+            val s = setFullScreenCallBlocked(pkg, blocked)
+            if (!s) allSuccess = false
         }
+        Log.i(TAG, "Block all full screen calls ($blocked): $allSuccess")
+        return allSuccess
     }
 }

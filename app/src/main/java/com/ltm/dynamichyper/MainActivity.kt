@@ -1,20 +1,18 @@
 package com.ltm.dynamichyper
 
-import android.content.ComponentName
-import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.core.app.NotificationManagerCompat
-import com.ltm.dynamichyper.core.DynamicNotificationService
-import com.ltm.dynamichyper.core.IdleIslandManager
+import androidx.compose.animation.Crossfade
+import androidx.compose.runtime.*
+import com.ltm.dynamichyper.feature.islands.IdleIslandManager
 import com.ltm.dynamichyper.core.ShizukuEngine
 import com.ltm.dynamichyper.data.PreferencesManager
 import com.ltm.dynamichyper.ui.screens.DashboardScreen
+import com.ltm.dynamichyper.ui.screens.OnboardingTermsScreen
+import com.ltm.dynamichyper.ui.screens.SplashScreen
 import com.ltm.dynamichyper.ui.theme.DynamicHyperTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -60,7 +58,32 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             DynamicHyperTheme {
-                DashboardScreen(prefs = prefs)
+                var isSplashShowing by remember { mutableStateOf(true) }
+                val isTermsAccepted by prefs.isTermsAccepted.collectAsState(initial = false)
+                val scope = rememberCoroutineScope()
+
+                Crossfade(targetState = isSplashShowing, label = "splashTransition") { showingSplash ->
+                    if (showingSplash) {
+                        SplashScreen(
+                            onTimeout = { isSplashShowing = false }
+                        )
+                    } else {
+                        // Bắt buộc người dùng tích đồng ý điều khoản & miễn trừ trách nhiệm trước khi vào giao diện app
+                        Crossfade(targetState = isTermsAccepted, label = "termsTransition") { accepted ->
+                            if (!accepted) {
+                                OnboardingTermsScreen(
+                                    onAcceptAndStart = {
+                                        scope.launch {
+                                            prefs.setTermsAccepted(true)
+                                        }
+                                    }
+                                )
+                            } else {
+                                DashboardScreen(prefs = prefs)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -72,13 +95,4 @@ class MainActivity : ComponentActivity() {
             Shizuku.removeRequestPermissionResultListener(requestPermissionResultListener)
         } catch (_: Throwable) {}
     }
-
-    companion object {
-        fun isNotificationServiceEnabled(context: Context): Boolean {
-            val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
-            val cn = ComponentName(context, DynamicNotificationService::class.java)
-            return flat != null && flat.contains(cn.flattenToString())
-        }
-    }
 }
-

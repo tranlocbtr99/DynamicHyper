@@ -12,15 +12,25 @@ android {
         applicationId = "com.ltm.dynamichyper"
         minSdk = 34
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 26
+        versionName = "1.5.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -53,6 +63,7 @@ dependencies {
     // Liquid Glass UI Effects
     implementation(libs.haze)
     implementation(libs.haze.materials)
+    implementation(libs.androidx.palette.ktx)
 
     // Xiaomi Focus Notification Kit & Protocol
     implementation(libs.hyperisland.kit)
