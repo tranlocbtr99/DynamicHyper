@@ -91,7 +91,10 @@ object ShizukuEngine {
         for (cmd in commands) {
             val (code, out) = execCommand(cmd)
             Log.d(TAG, "Exec: $cmd -> code $code, out: $out")
-            if (code != 0) allSuccess = false
+            if (code != 0) {
+                // Một số ROM không định nghĩa op appops đó -> không coi là thất bại toàn bộ
+                AppLogger.w(TAG, "Bỏ qua lệnh không chạy được trên ROM này: $cmd (exit=$code ${out.take(80)})")
+            }
         }
 
         applyXmsfBypass()
@@ -99,13 +102,19 @@ object ShizukuEngine {
     }
 
     /**
-     * Chặn mạng com.xiaomi.xmsf qua chuẩn Connectivity Chain 3 để HyperOS cho phép Focus Island
+     * Chặn mạng com.xiaomi.xmsf qua chuẩn Connectivity Chain 3 để HyperOS cho phép Focus Island.
+     * Chỉ chạy bước 2 khi ROM thực sự hỗ trợ chain3, tránh tự tắt mạng XMSF trên ROM không hỗ trợ.
      */
     fun applyXmsfBypass(): Boolean {
-        val (c1, _) = execCommand("cmd connectivity set-chain3-enabled true")
-        val (c2, _) = execCommand("cmd connectivity set-package-networking-enabled false com.xiaomi.xmsf")
-        val success = c1 == 0 && c2 == 0
+        val (c1, out1) = execCommand("cmd connectivity set-chain3-enabled true")
+        if (c1 != 0) {
+            AppLogger.i(TAG, "Bỏ qua XMSF bypass: ROM không hỗ trợ chain3 (exit=$c1 ${out1.take(80)})")
+            return false
+        }
+        val (c2, out2) = execCommand("cmd connectivity set-package-networking-enabled false com.xiaomi.xmsf")
+        val success = c2 == 0
         Log.i(TAG, "Applied HyperOS XMSF Bypass via Connectivity chain3: $success")
+        AppLogger.i(TAG, "XMSF bypass chain3=OK, block xmsf=$success ${if (success) "" else out2.take(80)}")
         return success
     }
 

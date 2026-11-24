@@ -195,7 +195,7 @@ private fun OverviewTabScreen(
         isPostNotificationGranted,
         isNotificationAccessGranted,
         isFloatingNotificationGranted,
-        isLockscreenOpGranted || isNotificationAccessGranted,
+        isLockscreenOpGranted,
         isBatteryOptimizationIgnored,
         isAutoStartGranted,
         isInstallGranted
@@ -390,9 +390,17 @@ private fun OverviewTabScreen(
                                     }
                                     !isFloatingNotificationGranted -> {
                                         if (isShizukuReady) {
-                                            PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
-                                            isFloatingNotificationGranted = true
-                                            Toast.makeText(context, "Đã bật Thông Báo Nổi qua Shizuku!", Toast.LENGTH_SHORT).show()
+                                            val ok = PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
+                                            isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
+                                            Toast.makeText(
+                                                context,
+                                                when {
+                                                    isFloatingNotificationGranted -> "Đã bật Thông Báo Nổi qua Shizuku!"
+                                                    ok -> "Đã gửi lệnh nhưng HyperOS chưa xác nhận. Kiểm tra lại trong Cài đặt."
+                                                    else -> "Shizuku chưa cấp quyền. Mở Cài đặt để bật thủ công."
+                                                },
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                         } else {
                                             PermissionHelper.openMiuiOtherPermissions(context)
                                         }
@@ -459,12 +467,13 @@ private fun OverviewTabScreen(
                             val success = ShizukuEngine.applyOneTouchOptimizations(context)
                             PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
                             isShizukuReady = true
-                            isNotificationAccessGranted = true
-                            isPostNotificationGranted = true
-                            isFloatingNotificationGranted = true
-                            isBatteryOptimizationIgnored = true
-                            isAutoStartGranted = true
-                            isLockscreenOpGranted = true
+                            // Đọc lại trạng thái THẬT sau khi Shizuku áp dụng, không ép cứng true
+                            isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
+                            isPostNotificationGranted = PermissionHelper.isPostNotificationGranted(context)
+                            isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
+                            isBatteryOptimizationIgnored = PermissionHelper.isBatteryOptimizationIgnored(context)
+                            isAutoStartGranted = PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_BG_START)
+                            isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_SHOW_WHEN_LOCKED)
                             scope.launch { prefs.setAutoStartMarked(true) }
                             Toast.makeText(
                                 context,
@@ -534,9 +543,17 @@ private fun OverviewTabScreen(
                 isGranted = isFloatingNotificationGranted,
                 onActionClick = {
                     if (isShizukuReady) {
-                        PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
-                        isFloatingNotificationGranted = true
-                        Toast.makeText(context, "Đã bật Thông Báo Nổi qua Shizuku!", Toast.LENGTH_SHORT).show()
+                        val ok = PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
+                        isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
+                        Toast.makeText(
+                            context,
+                            when {
+                                isFloatingNotificationGranted -> "Đã bật Thông Báo Nổi qua Shizuku!"
+                                ok -> "Đã gửi lệnh nhưng HyperOS chưa xác nhận. Kiểm tra lại trong Cài đặt."
+                                else -> "Shizuku chưa cấp quyền. Mở Cài đặt để bật thủ công."
+                            },
+                            Toast.LENGTH_SHORT
+                        ).show()
                     } else {
                         PermissionHelper.openAppNotificationSettings(context)
                     }
@@ -557,7 +574,7 @@ private fun OverviewTabScreen(
             CompactPermissionItem(
                 title = "Hiển Thị Trên Màn Hình Khóa",
                 icon = Icons.Default.Lock,
-                isGranted = isLockscreenOpGranted || isNotificationAccessGranted,
+                isGranted = isLockscreenOpGranted,
                 onActionClick = { PermissionHelper.openMiuiOtherPermissions(context) }
             )
 
@@ -578,7 +595,7 @@ private fun OverviewTabScreen(
                 isGranted = isAutoStartGranted,
                 onActionClick = {
                     scope.launch { prefs.setAutoStartMarked(true) }
-                    isAutoStartGranted = true
+                    // Không ép isAutoStartGranted = true: người dùng vẫn phải vào Cài đặt và bật tay
                     PermissionHelper.openMiuiAutoStartSettings(context)
                 }
             )

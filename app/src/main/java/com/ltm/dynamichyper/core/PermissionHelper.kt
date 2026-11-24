@@ -88,24 +88,51 @@ object PermissionHelper {
     }
 
     /**
-     * Nhận diện quyền Tự khởi chạy và Quyền hiển thị màn hình khóa của Xiaomi HyperOS
+     * Đọc thẳng MODE của app-op MIUI/HyperOS qua Reflection.
+     * Trả về -1 khi ROM không hỗ trợ op đó (không được coi là "bị từ chối").
+     */
+    fun getMiuiOpMode(context: Context, opCode: Int): Int {
+        return try {
+            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+            val method = AppOpsManager::class.java.getMethod(
+                "checkOpNoThrow",
+                Int::class.javaPrimitiveType,
+                Int::class.javaPrimitiveType,
+                String::class.java
+            )
+            method.invoke(appOps, opCode, Process.myUid(), context.packageName) as Int
+        } catch (_: Throwable) {
+            -1
+        }
+    }
+
+    /** true nếu ROM thật sự định nghĩa op này (đọc được mode). */
+    fun isMiuiOpKnown(context: Context, opCode: Int): Boolean = getMiuiOpMode(context, opCode) >= 0
+
+    /**
+     * Nhận diện quyền Tự khởi chạy và Quyền hiển thị màn hình khóa của Xiaomi HyperOS.
+     * KHÔNG còn cộng quyền đọc thông báo vào đây: đó là lỗi false-positive khiến UI
+     * báo "đã cấp" trong khi công tắc thật vẫn tắt.
      */
     fun isAutoStartOrLockscreenGranted(context: Context, isManuallyMarked: Boolean = false): Boolean {
         if (isManuallyMarked) return true
-        // Trên Xiaomi HyperOS, khi người dùng cấp quyền Tự khởi chạy hoặc Quyền khác,
-        // các mã op 10008, 10020, 10021 sẽ được set sang MODE_ALLOWED (0)
         return isMiuiOpAllowed(context, OP_MIUI_SHOW_WHEN_LOCKED) ||
                isMiuiOpAllowed(context, OP_MIUI_BG_START) ||
-               isMiuiOpAllowed(context, OP_MIUI_POPUP_WINDOW) ||
-               isNotificationAccessGranted(context)
+               isMiuiOpAllowed(context, OP_MIUI_POPUP_WINDOW)
     }
 
     /**
-     * Kiểm tra quyền Thông báo nổi (Floating Notifications / Heads-up) của Xiaomi HyperOS
-     * Trên HyperOS (Android 17), công tắc Thông báo nổi chuẩn là mã Op 10033 (kết hợp 10020 làm fallback)
+     * Kiểm tra quyền Thông báo nổi (Floating Notifications / Heads-up) của Xiaomi HyperOS.
+     * HyperOS 4 dùng op 10033; các bản cũ dùng 10020. Nếu ROM không đọc được op nào
+     * thì trả true để không chặn oan người dùng (trạng thái = không xác định).
      */
     fun isFloatingNotificationAllowed(context: Context): Boolean {
-        return isMiuiOpAllowed(context, OP_MIUI_FLOAT_NOTIFICATION) || isMiuiOpAllowed(context, OP_MIUI_BG_START)
+        val op = when {
+            isMiuiOpKnown(context, OP_MIUI_FLOAT_NOTIFICATION) -> OP_MIUI_FLOAT_NOTIFICATION
+            isMiuiOpKnown(context, OP_MIUI_BG_START) -> OP_MIUI_BG_START
+            else -> return true
+        }
+        return isMiuiOpAllowed(context, op)
     }
 
     // ================= INTENTS =================
@@ -169,17 +196,17 @@ object PermissionHelper {
     }
 
     /**
-     * Tắt hoặc Bật thông báo nổi (Floating notification / Heads-up) của app qua Shizuku
-     * Cấp đồng bộ cả Op 10033 (công tắc chính trong cài đặt thông báo HyperOS) và Op 10020
+     * Tắt hoặc Bật thông báo nổi (Floating notification / Heads-up) của app qua Shizuku.
+     * HyperOS 4 dùng op 10033, bản cũ dùng 10020 → set cả hai, thành công nếu ÍT NHẤT một op tồn tại.
      */
     fun setMiuiFloatingNotificationEnabled(packageName: String, enabled: Boolean): Boolean {
         if (!ShizukuEngine.hasShizukuPermission()) return false
         val mode = if (enabled) "allow" else "ignore"
-        val cmd1 = "cmd appops set $packageName 10033 $mode"
-        val cmd2 = "cmd appops set $packageName 10020 $mode"
-        val (exit1, _) = ShizukuEngine.execCommand(cmd1)
-        val (exit2, _) = ShizukuEngine.execCommand(cmd2)
-        return exit1 == 0 && exit2 == 0
+        val results = listOf(OP_MIUI_FLOAT_NOTIFICATION, OP_MIUI_BG_START).map { op ->
+            val (exit, _) = ShizukuEngine.execCommand("cmd appops set $packageName $op $mode")
+            exit == 0
+        }
+        return results.any { it }
     }
 
     /**

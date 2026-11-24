@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
@@ -22,6 +23,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.DynamicHyper">
+
+        <!-- Yêu cầu targetSdk 37: dịch vụ foreground dạng special-use để giữ listener sống -->
+        <property android:name="android.app.PROPERTY_SPECIAL_USE_APP" android:value="true" />
 
         <!-- Main UI Activity with LTMori Multi-Task Shield (excludeFromRecents) -->
         <activity
@@ -47,6 +51,13 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- Keep-Alive Service (foreground special-use) để giữ NotificationListenerService -->
+        <service
+            android:name=".service.KeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false" />
 
         <!-- Keep-Alive Receiver for Instant Rebind on Screen Unlock & Power -->
         <receiver
