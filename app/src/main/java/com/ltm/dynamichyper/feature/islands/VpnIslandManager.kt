@@ -153,7 +153,7 @@ class VpnIslandManager(private val context: Context) {
                 isOngoing = true
             )
 
-            NotificationManagerCompat.from(context).notify(VPN_NOTIFICATION_ID, notification)
+            com.ltm.dynamichyper.core.FocusProtocolHelper.postNotificationSafely(context, VPN_NOTIFICATION_ID, notification)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to show VPN island: ${e.message}")
         }

@@ -305,7 +305,7 @@ private fun OverviewTabScreen(
                             style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = AppleBlue)
                         )
                         Text(
-                            text = "v2.0.4-beta",
+                            text = "v2.0.5-beta",
                             style = Typography.bodySmall.copy(fontSize = 10.sp, color = TextSecondary)
                         )
                     }
@@ -494,6 +494,8 @@ private fun OverviewTabScreen(
                             isAutoStartGranted = PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_BG_START)
                             isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_SHOW_WHEN_LOCKED)
                             scope.launch { prefs.setAutoStartMarked(true) }
+                            IdleIslandManager.resetCache()
+                            IdleIslandManager.showIdleIsland(context, idleIslandWidth)
                             Toast.makeText(
                                 context,
                                 if (success) "Đã tối ưu hóa thành công 100%! Đảo đã kích hoạt." else "Đã áp dụng tối ưu hóa hệ thống.",
@@ -507,6 +509,17 @@ private fun OverviewTabScreen(
                             PermissionHelper.openNotificationAccessSettings(context)
                         }
                     }
+                }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            LiquidActionButton(
+                text = "⚡ TEST BẮN ĐẢO NGAY (ÉP HIỂN THỊ)",
+                onClick = {
+                    IdleIslandManager.resetCache()
+                    IdleIslandManager.showIdleIsland(context, idleIslandWidth)
+                    Toast.makeText(context, "Đã gửi lệnh ép vẽ Đảo lên camera notch!", Toast.LENGTH_SHORT).show()
                 }
             )
         }

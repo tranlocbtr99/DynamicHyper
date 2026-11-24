@@ -12,8 +12,8 @@ android {
         applicationId = "com.ltm.dynamichyper"
         minSdk = 33
         targetSdk = 37
-        versionCode = 41
-        versionName = "2.0.4-beta"
+        versionCode = 42
+        versionName = "2.0.5-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

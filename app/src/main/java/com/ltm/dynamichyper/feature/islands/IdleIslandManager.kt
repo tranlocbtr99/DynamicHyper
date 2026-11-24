@@ -210,7 +210,7 @@ class IdleIslandManager(
                     contentIntent = contentIntent
                 )
 
-                NotificationManagerCompat.from(context).notify(IDLE_ISLAND_ID, notification)
+                FocusProtocolHelper.postNotificationSafely(context, IDLE_ISLAND_ID, notification)
                 com.ltm.dynamichyper.core.AppLogger.i(TAG, "Đã gửi thông báo Đảo Chờ (style=$style, width=$effectiveWidth, pri=HIGH, silent=true, isShowNotification=true)")
             } catch (e: Exception) {
                 Log.e(TAG, "Error direct dispatch: ${e.message}")

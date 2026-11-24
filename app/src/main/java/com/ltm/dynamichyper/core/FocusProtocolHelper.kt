@@ -15,6 +15,9 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.ltm.dynamichyper.R
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 object FocusProtocolHelper {
 
@@ -234,6 +237,21 @@ object FocusProtocolHelper {
             Gson().toJson(root)
         } catch (_: Exception) {
             json
+        }
+    }
+
+    /**
+     * Bắn thông báo Đảo Tiêu Điểm có bảo vệ XMSF bypass và đồng bộ Shizuku
+     */
+    fun postNotificationSafely(
+        context: Context,
+        id: Int,
+        notification: Notification,
+        scope: CoroutineScope? = null
+    ) {
+        val s = scope ?: CoroutineScope(Dispatchers.IO)
+        s.launch {
+            ShizukuEngine.postNotificationSafely(context, id, notification)
         }
     }
 }

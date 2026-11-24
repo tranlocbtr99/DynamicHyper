@@ -514,7 +514,7 @@ class DynamicNotificationService : NotificationListenerService() {
             actionsMap = actionsMap
         )
 
-        NotificationManagerCompat.from(this).notify(dynamicIslandId, notification)
+        FocusProtocolHelper.postNotificationSafely(this, dynamicIslandId, notification, scope = serviceScope)
 
         // Loại bỏ thông báo gốc của app nhắn tin khỏi Notification Shade (tương tự removeOriginalNotification của HyperBridge)
         // để người dùng không bị thấy 2 thông báo cùng một lúc

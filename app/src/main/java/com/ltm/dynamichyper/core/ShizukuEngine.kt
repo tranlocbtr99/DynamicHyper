@@ -1,8 +1,13 @@
 package com.ltm.dynamichyper.core
 
+import android.app.Notification
 import android.content.Context
 import android.content.pm.PackageManager
 import android.util.Log
+import androidx.core.app.NotificationManagerCompat
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -12,6 +17,7 @@ import java.io.InputStreamReader
  */
 object ShizukuEngine {
     private const val TAG = "DynamicHyper:Shizuku"
+    private val notifyMutex = Mutex()
 
     fun isShizukuAvailable(): Boolean {
         return try {
@@ -78,6 +84,9 @@ object ShizukuEngine {
         val commands = listOf(
             "cmd notification allow_listener $packageName/com.ltm.dynamichyper.service.DynamicNotificationService",
             "dumpsys deviceidle whitelist +$packageName",
+            "setprop persist.sys.feature.island true",
+            "resetprop persist.sys.feature.island true",
+            "settings put system notification_focus_protocol 2",
             "cmd appops set $packageName AUTO_START allow",
             "cmd appops set $packageName 10008 allow",
             "cmd appops set $packageName 10020 allow",
@@ -175,5 +184,40 @@ object ShizukuEngine {
         }
         Log.i(TAG, "Block all full screen calls ($blocked): $allSuccess")
         return allSuccess
+    }
+
+    /**
+     * Gửi thông báo an toàn bằng cách tạm thời cô lập mạng của com.xiaomi.xmsf (50ms)
+     * để AuthManager trên HyperOS China ROM bỏ qua bước kiểm duyệt Cloud (-300 error),
+     * sau đó mở lại mạng bình thường sau 100ms. Chuẩn 100% HyperBridge.
+     */
+    suspend fun postNotificationSafely(context: Context, id: Int, notification: Notification) {
+        notifyMutex.withLock {
+            val pm = context.packageManager
+            val xmsfUid = try {
+                pm.getPackageUid("com.xiaomi.xmsf", 0)
+            } catch (_: Exception) {
+                null
+            }
+
+            if (hasShizukuPermission() && xmsfUid != null) {
+                try {
+                    ShizukuHook.setPackageNetworkingEnabled(xmsfUid, false)
+                    delay(50L)
+                    NotificationManagerCompat.from(context).notify(id, notification)
+                    Log.d(TAG, "✓ Đã bắn Focus Notification với XMSF bypass (id=$id)")
+                } catch (e: Throwable) {
+                    Log.w(TAG, "Lỗi bắn thông báo XMSF bypass: ${e.message}")
+                    NotificationManagerCompat.from(context).notify(id, notification)
+                } finally {
+                    delay(100L)
+                    try {
+                        ShizukuHook.setPackageNetworkingEnabled(xmsfUid, true)
+                    } catch (_: Throwable) {}
+                }
+            } else {
+                NotificationManagerCompat.from(context).notify(id, notification)
+            }
+        }
     }
 }

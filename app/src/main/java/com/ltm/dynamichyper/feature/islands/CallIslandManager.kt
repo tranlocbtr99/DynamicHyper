@@ -332,7 +332,7 @@ class CallIslandManager(
                 notification.actions = callActions.toTypedArray()
             }
 
-            NotificationManagerCompat.from(context).notify(CALL_ISLAND_ID, notification)
+            FocusProtocolHelper.postNotificationSafely(context, CALL_ISLAND_ID, notification)
             Log.i(TAG, "Call Island successfully posted for: $callerName")
         } catch (e: Exception) {
             Log.e(TAG, "Error posting call island: ${e.message}", e)

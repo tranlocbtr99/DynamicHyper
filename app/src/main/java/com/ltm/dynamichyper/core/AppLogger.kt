@@ -114,6 +114,8 @@ object AppLogger {
         sb.append("Bg Popup (10020): ${PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_BG_START)}\n")
         sb.append("Lockscreen Op (10008): ${PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_SHOW_WHEN_LOCKED)}\n")
         sb.append("Battery Optimization Ignored: ${PermissionHelper.isBatteryOptimizationIgnored(context)}\n")
+        sb.append("Focus Gate canShowFocus: ${FocusProtocolHelper.canShowFocus(context)}\n")
+        sb.append("Focus Gate isIslandFeature: ${FocusProtocolHelper.isIslandFeatureAvailable()}\n")
         sb.append("Shizuku Available: ${ShizukuEngine.isShizukuAvailable()} (Granted: ${ShizukuEngine.hasShizukuPermission()})\n")
         sb.append("=========================================\n\n")
 

@@ -362,7 +362,7 @@ class ChargingIslandManager(
             onlyAlertOnce = false
         )
 
-        NotificationManagerCompat.from(context).notify(CHARGING_NOTIFICATION_ID, notif)
+        FocusProtocolHelper.postNotificationSafely(context, CHARGING_NOTIFICATION_ID, notif)
     }
 
     private fun hideChargingIsland() {

@@ -95,7 +95,7 @@ object ScreenRecordingIslandManager {
                 isOngoing = true
             )
 
-            NotificationManagerCompat.from(context).notify(RECORDING_NOTIFICATION_ID, notification)
+            com.ltm.dynamichyper.core.FocusProtocolHelper.postNotificationSafely(context, RECORDING_NOTIFICATION_ID, notification)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to show recording island: ${e.message}")
         }
