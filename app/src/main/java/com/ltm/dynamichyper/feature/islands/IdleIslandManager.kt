@@ -38,6 +38,9 @@ class IdleIslandManager(
         @Volatile
         private var instance: IdleIslandManager? = null
 
+        @Volatile
+        private var lastDispatchedWidgetText: String = ""
+
         fun getInstance(): IdleIslandManager? = instance
 
         fun reassertStatic() {
@@ -76,8 +79,8 @@ class IdleIslandManager(
                 paramV2.put("updatable", true)
                 paramV2.put("ticker", "Dynamic Hyper")
                 paramV2.put("timeout", 1440)
-                // enableFloat: Giữ true để HyperOS SystemUI định vị lên thanh trạng thái quanh camera
-                paramV2.put("enableFloat", true)
+                // enableFloat: Đảo Chờ luôn để false để TUYỆT ĐỐI KHÔNG bung to heads-up banner che màn hình!
+                paramV2.put("enableFloat", false)
                 paramV2.put("isShowNotification", true)
                 // islandFirstFloat & reopen: FALSE để KHÔNG bao giờ tự bung to chiếm màn hình
                 paramV2.put("islandFirstFloat", false)
@@ -180,6 +183,12 @@ class IdleIslandManager(
                     android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
                 )
 
+                val currentText = "$style|$widgetTitle|$widgetContent|$effectiveWidth"
+                if (lastDispatchedWidgetText == currentText && instance?.isShowing == true) {
+                    return
+                }
+                lastDispatchedWidgetText = currentText
+
                 val notification = FocusProtocolHelper.buildFocusNotification(
                     context = context,
                     title = widgetTitle,
@@ -189,12 +198,13 @@ class IdleIslandManager(
                     pics = pics,
                     isOngoing = true,
                     onlyAlertOnce = true,
-                    priority = androidx.core.app.NotificationCompat.PRIORITY_HIGH,
+                    isSilent = true,
+                    priority = androidx.core.app.NotificationCompat.PRIORITY_LOW,
                     contentIntent = contentIntent
                 )
 
                 NotificationManagerCompat.from(context).notify(IDLE_ISLAND_ID, notification)
-                com.ltm.dynamichyper.core.AppLogger.i(TAG, "Đã gửi thông báo Đảo Chờ (style=$style, width=$effectiveWidth, pri=HIGH, enableFloat=true)")
+                com.ltm.dynamichyper.core.AppLogger.i(TAG, "Đã gửi thông báo Đảo Chờ (style=$style, width=$effectiveWidth, pri=LOW, silent=true)")
             } catch (e: Exception) {
                 Log.e(TAG, "Error direct dispatch: ${e.message}")
                 com.ltm.dynamichyper.core.AppLogger.e(TAG, "Lỗi gửi thông báo Đảo Chờ: ${e.message}", e)

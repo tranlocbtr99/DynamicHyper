@@ -140,6 +140,7 @@ object FocusProtocolHelper {
         pics: Map<String, Bitmap> = emptyMap(),
         isOngoing: Boolean = true,
         onlyAlertOnce: Boolean = true,
+        isSilent: Boolean = false,
         priority: Int = NotificationCompat.PRIORITY_HIGH,
         contentIntent: android.app.PendingIntent? = null,
         actionsMap: Map<String, Any> = emptyMap()
@@ -157,6 +158,7 @@ object FocusProtocolHelper {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(isOngoing)
             .setOnlyAlertOnce(onlyAlertOnce)
+            .setSilent(isSilent)
 
         if (contentIntent != null) {
             builder.setContentIntent(contentIntent)
