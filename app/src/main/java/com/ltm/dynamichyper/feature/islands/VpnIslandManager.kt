@@ -89,10 +89,11 @@ class VpnIslandManager(private val context: Context) {
             val jsonParam = """
             {
               "param_v2": {
-                "protocol": 3,
-                "business": "dynamic_hyper_vpn",
+                "protocol": 1,
+                "business": "taxi",
                 "updatable": true,
                 "ticker": "VPN Đang Hoạt Động",
+                "timeout": 1440,
                 "enableFloat": false,
                 "isShowNotification": true,
                 "islandFirstFloat": true,

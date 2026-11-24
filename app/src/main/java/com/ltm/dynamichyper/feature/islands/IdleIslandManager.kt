@@ -61,7 +61,7 @@ class IdleIslandManager(
         }
 
         fun updateStyle(context: Context, style: String) {
-            instance?.reassert() ?: dispatchDirect(context, 10, style)
+            instance?.updateStyleInternal(style) ?: dispatchDirect(context, 10, style)
         }
 
         fun dispatchDirect(context: Context, width: Int, style: String = "minimal") {
@@ -71,11 +71,11 @@ class IdleIslandManager(
 
                 val root = org.json.JSONObject()
                 val paramV2 = org.json.JSONObject()
-                paramV2.put("protocol", 3)
-                paramV2.put("business", "dynamic_hyper_idle")
+                paramV2.put("protocol", 1)
+                paramV2.put("business", "taxi")
                 paramV2.put("updatable", true)
                 paramV2.put("ticker", "Dynamic Hyper")
-                paramV2.put("timeout", 0)
+                paramV2.put("timeout", 1440)
                 // enableFloat: BẮT BUỘC TRUE ĐỂ HYPEROS ATTACH ĐẢO VÀO CAMERA NOTCH!
                 paramV2.put("enableFloat", true)
                 paramV2.put("isShowNotification", true)
@@ -91,7 +91,7 @@ class IdleIslandManager(
                 paramIsland.put("dismissIsland", false)
                 paramIsland.put("maxSize", false)
                 paramIsland.put("needCloseAnimation", false)
-                paramIsland.put("expandedTime", 0)
+                paramIsland.put("expandedTime", 2)
 
                 // Tính toán nội dung tiêu đề và màu sắc
                 val weather = WeatherManager.currentData
@@ -202,36 +202,48 @@ class IdleIslandManager(
         }
 
         /**
-         * Vẽ bitmap tỉ lệ 1.15:1 (84x72) chuẩn slot của Xiaomi SystemUI.
-         * Tuyệt đối không vẽ bitmap dài ngoằng để tránh bị Xiaomi SystemUI bóp dẹt xuống còn 8px.
+         * Vẽ bitmap chuẩn slot viên thuốc của Xiaomi SystemUI.
+         * Nền Dark Capsule #E6000000 bo tròn có viền kính mờ để hiển thị sắc nét trên cả Theme Sáng lẫn Theme Tối.
          */
         private fun renderIdleDotBitmap(context: Context, style: String): Bitmap {
-            val bmpWidth = 84
+            val bmpWidth = 100
             val bmpHeight = 72
             val bmp = Bitmap.createBitmap(bmpWidth, bmpHeight, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bmp)
 
+            // Vẽ nền viên thuốc Dark Capsule bo tròn tương phản cao
+            val capsuleRect = RectF(2f, 2f, bmpWidth - 2f, bmpHeight - 2f)
+            val capsulePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.parseColor("#E6000000") // 90% đen nhung
+            }
+            canvas.drawRoundRect(capsuleRect, 32f, 32f, capsulePaint)
+
+            val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.style = Paint.Style.STROKE
+                strokeWidth = 2f
+                color = Color.parseColor("#33FFFFFF") // Viền kính mờ tinh tế
+            }
+            canvas.drawRoundRect(capsuleRect, 32f, 32f, borderPaint)
+
+            val cx = bmpWidth / 2f
+            val cy = bmpHeight / 2f
+
             when (style) {
                 "green_dot" -> {
-                    val cx = bmpWidth / 2f
-                    val cy = bmpHeight / 2f
-                    val glowRadius = 13f
-                    val dotRadius = 6f
-
-                    val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-                    val radialShader = RadialGradient(
-                        cx, cy, glowRadius,
-                        Color.parseColor("#6630D158"),
-                        Color.TRANSPARENT,
-                        Shader.TileMode.CLAMP
-                    )
-                    glowPaint.shader = radialShader
-                    canvas.drawCircle(cx, cy, glowRadius, glowPaint)
+                    val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        shader = RadialGradient(
+                            cx, cy, 18f,
+                            Color.parseColor("#8030D158"),
+                            Color.TRANSPARENT,
+                            Shader.TileMode.CLAMP
+                        )
+                    }
+                    canvas.drawCircle(cx, cy, 18f, glowPaint)
 
                     val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         color = Color.parseColor("#30D158")
                     }
-                    canvas.drawCircle(cx, cy, dotRadius, dotPaint)
+                    canvas.drawCircle(cx, cy, 8f, dotPaint)
                 }
                 "battery_temp" -> {
                     val temp = getBatteryTemperature(context)
@@ -241,43 +253,47 @@ class IdleIslandManager(
                         else -> Color.parseColor("#FF453A") // Nóng
                     }
                     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        textSize = 54f // Cực to, choán trọn slot không gian
+                        textSize = 42f
                         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         textAlign = Paint.Align.CENTER
                         color = textColor
-                        setShadowLayer(12f, 0f, 0f, textColor)
+                        setShadowLayer(8f, 0f, 0f, textColor)
                     }
-                    val y = (bmpHeight / 2f) - ((textPaint.descent() + textPaint.ascent()) / 2f)
-                    canvas.drawText("${temp}°", bmpWidth / 2f, y, textPaint)
+                    val y = cy - ((textPaint.descent() + textPaint.ascent()) / 2f)
+                    canvas.drawText("${temp}°", cx, y, textPaint)
                 }
                 "ram_usage" -> {
                     val ramText = getUsedRamGb(context)
                     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        textSize = 52f // Cực to, sắc nét
+                        textSize = 40f
                         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         textAlign = Paint.Align.CENTER
                         color = Color.parseColor("#00F2FE")
-                        setShadowLayer(12f, 0f, 0f, Color.parseColor("#00F2FE"))
+                        setShadowLayer(8f, 0f, 0f, Color.parseColor("#00F2FE"))
                     }
-                    val y = (bmpHeight / 2f) - ((textPaint.descent() + textPaint.ascent()) / 2f)
-                    canvas.drawText(ramText, bmpWidth / 2f, y, textPaint)
+                    val y = cy - ((textPaint.descent() + textPaint.ascent()) / 2f)
+                    canvas.drawText(ramText, cx, y, textPaint)
                 }
                 "weather" -> {
                     val weather = WeatherManager.currentData
-                    // Vẽ số nhiệt độ to đùng ở trung tâm choán trọn slot
                     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        textSize = 54f // Cực to, dễ nhìn từ xa
+                        textSize = 42f
                         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         textAlign = Paint.Align.CENTER
                         color = Color.parseColor("#FFD60A")
-                        setShadowLayer(12f, 0f, 0f, Color.parseColor("#FFD60A"))
+                        setShadowLayer(8f, 0f, 0f, Color.parseColor("#FFD60A"))
                     }
-                    val y = (bmpHeight / 2f) - ((textPaint.descent() + textPaint.ascent()) / 2f)
-                    canvas.drawText("${weather.temp}°", bmpWidth / 2f, y, textPaint)
+                    val y = cy - ((textPaint.descent() + textPaint.ascent()) / 2f)
+                    canvas.drawText("${weather.temp}°", cx, y, textPaint)
                 }
                 else -> {
-                    // "minimal" -> Đen thui tuyệt đối, ôm khít nốt ruồi camera
-                    canvas.drawColor(Color.BLACK)
+                    // "minimal" -> Viên thuốc đen nhung có viền sáng viền camera
+                    val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        this.style = Paint.Style.STROKE
+                        strokeWidth = 3f
+                        color = Color.parseColor("#4D30D158") // Vòng sáng Neon xanh nhẹ
+                    }
+                    canvas.drawCircle(cx, cy, 14f, ringPaint)
                 }
             }
             return bmp
@@ -462,6 +478,17 @@ class IdleIslandManager(
         } else if (isEnabled) {
             // Khi hết thông báo hoặc người dùng đã xem/xóa => Tự động khôi phục Đảo Chờ ngay lập tức!
             reassert()
+        }
+    }
+
+    fun updateStyleInternal(style: String) {
+        islandStyle = style
+        pendingJob?.cancel()
+        pendingJob = scope.launch {
+            val width = prefs.idleIslandWidth.first()
+            dispatchDirect(context, width, style)
+            isShowing = true
+            Log.d(TAG, "Idle Island immediately updated to style: $style")
         }
     }
 

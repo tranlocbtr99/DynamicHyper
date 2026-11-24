@@ -31,10 +31,11 @@ object ScreenRecordingIslandManager {
             val jsonParam = """
             {
               "param_v2": {
-                "protocol": 3,
-                "business": "dynamic_hyper_screen_record",
+                "protocol": 1,
+                "business": "taxi",
                 "updatable": true,
                 "ticker": "Đang quay màn hình",
+                "timeout": 1440,
                 "enableFloat": true,
                 "isShowNotification": true,
                 "islandFirstFloat": true,

@@ -17,8 +17,7 @@ import com.ltm.dynamichyper.R
 object FocusProtocolHelper {
 
     const val CHANNEL_ID = "dynamic_hyper_focus_channel"
-    const val KEYGUARD_ISLAND_PROPERTY = 0
-    const val UNLOCKED_ISLAND_PROPERTY = 1
+    const val DEFAULT_ISLAND_PROPERTY = 1
 
     fun setupChannel(context: Context) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -98,8 +97,8 @@ object FocusProtocolHelper {
             builder.addExtras(actResourceBundle)
         }
 
-        // Dynamically adjust islandProperty for Lockscreen / Unlocked
-        val targetIslandProperty = if (isKeyguardLocked(context)) KEYGUARD_ISLAND_PROPERTY else UNLOCKED_ISLAND_PROPERTY
+        // Xiaomi HyperOS quy định islandProperty là 1 (Hiển thị) hoặc 2 (Thao tác), tuyệt đối không để 0
+        val targetIslandProperty = DEFAULT_ISLAND_PROPERTY
         val patchedJson = patchIslandProperty(jsonParam, targetIslandProperty)
 
         val notif = builder.build()
