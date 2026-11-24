@@ -189,8 +189,9 @@ object FocusProtocolHelper {
             builder.addExtras(actResourceBundle)
         }
 
-        // Xiaomi HyperOS quy định islandProperty là 1 (Hiển thị) hoặc 2 (Thao tác), tuyệt đối không để 0
-        val targetIslandProperty = DEFAULT_ISLAND_PROPERTY
+        // Xiaomi HyperOS quy định islandProperty là 1 (Hiển thị) hoặc 2 (Thao tác), trên Lockscreen là 0
+        val isLocked = isKeyguardLocked(context)
+        val targetIslandProperty = if (isLocked) 0 else DEFAULT_ISLAND_PROPERTY
         val patchedJson = patchIslandProperty(jsonParam, targetIslandProperty)
 
         val notif = builder.build()
@@ -198,6 +199,12 @@ object FocusProtocolHelper {
             notif.flags = notif.flags or Notification.FLAG_ONGOING_EVENT or Notification.FLAG_NO_CLEAR
         }
         notif.extras.putString("miui.focus.param", patchedJson)
+        // Đồng bộ miui.focus.param.custom theo chuẩn HyperBridge để SystemUI HyperOS 3 và HyperOS 4 luôn nhận diện được
+        try {
+            val rootObj = JsonParser.parseString(patchedJson).asJsonObject
+            val customObj = rootObj.getAsJsonObject("param_v2") ?: rootObj
+            notif.extras.putString("miui.focus.param.custom", Gson().toJson(customObj))
+        } catch (_: Exception) {}
         return notif
     }
 

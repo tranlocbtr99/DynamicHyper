@@ -81,7 +81,8 @@ class IdleIslandManager(
                 paramV2.put("timeout", 1440)
                 // enableFloat: Đảo Chờ luôn để false để TUYỆT ĐỐI KHÔNG bung to heads-up banner che màn hình!
                 paramV2.put("enableFloat", false)
-                paramV2.put("isShowNotification", true)
+                // isShowNotification: Đặt false để Đảo Chờ xuất hiện quanh nốt ruồi camera nhưng KHÔNG chiếm chỗ trong Trung tâm thông báo
+                paramV2.put("isShowNotification", false)
                 // islandFirstFloat & reopen: FALSE để KHÔNG bao giờ tự bung to chiếm màn hình
                 paramV2.put("islandFirstFloat", false)
                 paramV2.put("reopen", false)
@@ -163,7 +164,7 @@ class IdleIslandManager(
                 paramV2.put("iconTextInfo", iconTextInfo)
 
                 root.put("param_v2", paramV2)
-                root.put("isShowNotification", true)
+                root.put("isShowNotification", false)
 
                 val dotBitmap = renderIdleDotBitmap(context, style)
                 val leftBitmap = renderBigWidgetIcon(context, style)
@@ -199,12 +200,12 @@ class IdleIslandManager(
                     isOngoing = true,
                     onlyAlertOnce = true,
                     isSilent = true,
-                    priority = androidx.core.app.NotificationCompat.PRIORITY_LOW,
+                    priority = androidx.core.app.NotificationCompat.PRIORITY_HIGH,
                     contentIntent = contentIntent
                 )
 
                 NotificationManagerCompat.from(context).notify(IDLE_ISLAND_ID, notification)
-                com.ltm.dynamichyper.core.AppLogger.i(TAG, "Đã gửi thông báo Đảo Chờ (style=$style, width=$effectiveWidth, pri=LOW, silent=true)")
+                com.ltm.dynamichyper.core.AppLogger.i(TAG, "Đã gửi thông báo Đảo Chờ (style=$style, width=$effectiveWidth, pri=HIGH, silent=true, showInShade=false)")
             } catch (e: Exception) {
                 Log.e(TAG, "Error direct dispatch: ${e.message}")
                 com.ltm.dynamichyper.core.AppLogger.e(TAG, "Lỗi gửi thông báo Đảo Chờ: ${e.message}", e)

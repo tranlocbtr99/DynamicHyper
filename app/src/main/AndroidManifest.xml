@@ -57,7 +57,11 @@
             android:name=".service.KeepAliveService"
             android:exported="false"
             android:foregroundServiceType="specialUse"
-            android:stopWithTask="false" />
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="dynamic_hyper_keep_alive" />
+        </service>
 
         <!-- Keep-Alive Receiver for Instant Rebind on Screen Unlock & Power -->
         <receiver

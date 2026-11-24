@@ -468,6 +468,17 @@ class DynamicNotificationService : NotificationListenerService() {
         )
 
         NotificationManagerCompat.from(this).notify(dynamicIslandId, notification)
+
+        // Loại bỏ thông báo gốc của app nhắn tin khỏi Notification Shade (tương tự removeOriginalNotification của HyperBridge)
+        // để người dùng không bị thấy 2 thông báo cùng một lúc
+        if (isNewMessage) {
+            try {
+                cancelNotification(sbn.key)
+                com.ltm.dynamichyper.core.AppLogger.i("DynamicNotif", "Đã ẩn thông báo gốc của ${sbn.packageName} để tránh trùng lặp trong trung tâm thông báo")
+            } catch (e: Exception) {
+                Log.w("DynamicNotif", "Không thể cancelNotification cho sbn.key: ${e.message}")
+            }
+        }
         com.ltm.dynamichyper.core.AppLogger.i(TAG, "Đã gửi thông báo Focus cho ${sbn.packageName} (id=$dynamicIslandId, isMedia=$isMedia)")
 
         val isPersistent = prefs.isPersistentNotificationIsland.first()

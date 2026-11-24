@@ -103,6 +103,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Khởi động KeepAliveService một cách an toàn khi Activity đã ở Foreground
+        try {
+            val serviceIntent = android.content.Intent(this, com.ltm.dynamichyper.service.KeepAliveService::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        } catch (e: Exception) {
+            com.ltm.dynamichyper.core.AppLogger.e("MainActivity", "Lỗi khởi động KeepAliveService trong onResume: ${e.message}")
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         try {

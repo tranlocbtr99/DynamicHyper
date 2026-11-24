@@ -14,19 +14,11 @@ class DynamicHyperApp : Application() {
         super.onCreate()
         instance = this
         Log.i(TAG, "DynamicHyperApp initialized successfully")
-        AppLogger.i(TAG, "DynamicHyperApp khởi động phiên bản Beta thành công")
+        AppLogger.i(TAG, "DynamicHyperApp khởi động phiên bản v2.0.0-beta thành công")
 
-        // Khởi động KeepAliveService (foreground special-use) để giữ NotificationListenerService
-        // và Đảo Chờ không bị hệ thống thu hồi trong nền.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try {
-                startForegroundService(Intent(this, KeepAliveService::class.java))
-            } catch (e: Exception) {
-                AppLogger.e(TAG, "Không thể khởi động KeepAliveService: ${e.message}")
-            }
-        } else {
-            startService(Intent(this, KeepAliveService::class.java))
-        }
+        // Chú ý Android 12+: Tuyệt đối không gọi startForegroundService trong Application.onCreate()
+        // vì sẽ gây ra ForegroundServiceStartNotAllowedException và khiến app bị crash/buộc dừng khi mở lần đầu.
+        // KeepAliveService sẽ được khởi chạy an toàn từ MainActivity.onResume() khi cửa sổ app đã sẵn sàng.
 
         // Bắt lỗi Crash toàn cục để lưu vào nhật ký chẩn đoán
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
