@@ -100,6 +100,20 @@
             android:exported="true"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
+        <!-- Xiaomi HyperOS Super Island / Focus Notification Developer Metadata -->
+        <meta-data
+            android:name="com.xiaomi.xms.APP_ID"
+            android:value="2882303761517500000" />
+        <meta-data
+            android:name="com.xiaomi.xms.BUILD_TYPE_DEBUG"
+            android:value="true" />
+        <meta-data
+            android:name="com.xms.APP_ID"
+            android:value="2882303761517500000" />
+        <meta-data
+            android:name="com.xms.BUILD_TYPE_DEBUG"
+            android:value="true" />
+
     </application>
 
 </manifest>
