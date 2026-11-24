@@ -193,8 +193,10 @@ class IdleIslandManager(
                 )
 
                 NotificationManagerCompat.from(context).notify(IDLE_ISLAND_ID, notification)
+                com.ltm.dynamichyper.core.AppLogger.i(TAG, "Đã gửi thông báo Đảo Chờ (style=$style, width=$effectiveWidth, pri=HIGH, enableFloat=true)")
             } catch (e: Exception) {
                 Log.e(TAG, "Error direct dispatch: ${e.message}")
+                com.ltm.dynamichyper.core.AppLogger.e(TAG, "Lỗi gửi thông báo Đảo Chờ: ${e.message}", e)
             }
         }
 

@@ -102,6 +102,7 @@ class DynamicNotificationService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
         if (sbn.packageName == packageName) return
+        com.ltm.dynamichyper.core.AppLogger.d(TAG, "Bắt thông báo từ gói: ${sbn.packageName} (id=${sbn.id})")
         // Không xử lý lại các thông báo đã là Xiaomi Focus Island để tránh đệ quy
         if (sbn.notification.extras?.containsKey("miui.focus.param") == true) return
 

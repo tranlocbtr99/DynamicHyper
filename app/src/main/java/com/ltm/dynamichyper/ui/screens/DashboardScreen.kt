@@ -176,6 +176,7 @@ private fun OverviewTabScreen(
 
     var showTermsDialog by remember { mutableStateOf(false) }
     var showDonateDialog by remember { mutableStateOf(false) }
+    var showDiagnosticDialog by remember { mutableStateOf(false) }
     var updateInfoState by remember { mutableStateOf<UpdateInfo?>(null) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
 
@@ -217,26 +218,116 @@ private fun OverviewTabScreen(
             islandMode = idleIslandMode
         )
 
-        // Hàng tinh gọn OTA & Ủng Hộ Tác Giả (Compact Dual-Bubble Row)
-        CompactOtaAndDonateRow(
-            currentVersion = "v1.5.3",
-            isCheckingUpdate = isCheckingUpdate,
-            onCheckUpdateClick = {
-                scope.launch {
-                    isCheckingUpdate = true
-                    val update = OtaUpdateManager.checkUpdate(context)
-                    isCheckingUpdate = false
-                    if (update != null && update.hasUpdate) {
-                        updateInfoState = update
-                    } else {
-                        Toast.makeText(context, "Bạn đang dùng phiên bản mới nhất (${OtaUpdateManager.getCurrentVersion(context)})!", Toast.LENGTH_SHORT).show()
+        // Hàng tinh gọn OTA & Ủng Hộ Tác Giả & Kiểm Lỗi Beta (Compact Multi-Bubble Row)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Nút Kiểm Lỗi Beta (Nhật ký sự kiện)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(AppleOrange.copy(alpha = 0.12f))
+                    .border(1.dp, AppleOrange.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+                    .clickable { showDiagnosticDialog = true }
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.BugReport,
+                        contentDescription = null,
+                        tint = AppleOrange,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Column {
+                        Text(
+                            text = "Nhật Ký Beta",
+                            style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = AppleOrange)
+                        )
+                        Text(
+                            text = "Kiểm lỗi thời gian thực",
+                            style = Typography.bodySmall.copy(fontSize = 10.sp, color = TextSecondary)
+                        )
                     }
                 }
-            },
-            onDonateClick = {
-                showDonateDialog = true
             }
-        )
+
+            // Nút Cập nhật OTA
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(AppleBlue.copy(alpha = 0.12f))
+                    .border(1.dp, AppleBlue.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+                    .clickable {
+                        scope.launch {
+                            isCheckingUpdate = true
+                            val update = OtaUpdateManager.checkUpdate(context)
+                            isCheckingUpdate = false
+                            if (update != null && update.hasUpdate) {
+                                updateInfoState = update
+                            } else {
+                                Toast.makeText(context, "Bạn đang dùng bản mới nhất (${OtaUpdateManager.getCurrentVersion(context)})!", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isCheckingUpdate) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = AppleBlue
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.CloudSync,
+                            contentDescription = null,
+                            tint = AppleBlue,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Column {
+                        Text(
+                            text = "Cập Nhật OTA",
+                            style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = AppleBlue)
+                        )
+                        Text(
+                            text = "v1.5.4-beta",
+                            style = Typography.bodySmall.copy(fontSize = 10.sp, color = TextSecondary)
+                        )
+                    }
+                }
+            }
+
+            // Nút Ủng hộ (Donate)
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(AppleTeal.copy(alpha = 0.12f))
+                    .border(1.dp, AppleTeal.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+                    .clickable { showDonateDialog = true }
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Favorite,
+                        contentDescription = null,
+                        tint = AppleTeal,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Ủng Hộ",
+                        style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = AppleTeal)
+                    )
+                }
+            }
+        }
 
         // Cảnh báo & Nút Cấp Quyền Nhanh khi thiếu quyền Thông Báo
         if (!isPostNotificationGranted || !isNotificationAccessGranted) {
@@ -759,6 +850,12 @@ private fun OverviewTabScreen(
         }
     }
 
+    if (showDiagnosticDialog) {
+        DiagnosticLogDialog(
+            onDismissRequest = { showDiagnosticDialog = false }
+        )
+    }
+
     if (showTermsDialog) {
         TermsAndDisclaimerDialog(onAccept = { showTermsDialog = false })
     }
@@ -1086,6 +1183,8 @@ private fun FeaturesTabScreen(
                 )
             }
         }
+
+        // ================= DIALOGS =================
     }
 }
 
