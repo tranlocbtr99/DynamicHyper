@@ -239,11 +239,33 @@ class DynamicNotificationService : NotificationListenerService() {
 
     private suspend fun handleIncomingNotification(sbn: StatusBarNotification) {
         val notif = sbn.notification ?: return
+
+        // 1. Lọc thông báo Group Summary (tránh bão thông báo kép từ Messenger/Facebook/Zalo)
+        val isGroupSummary = (notif.flags and Notification.FLAG_GROUP_SUMMARY) != 0
+        if (isGroupSummary) {
+            val group = notif.group
+            val hasLiveChild = if (!group.isNullOrBlank()) {
+                try {
+                    activeNotifications?.any {
+                        it.packageName == sbn.packageName &&
+                                it.key != sbn.key &&
+                                (it.notification.flags and Notification.FLAG_GROUP_SUMMARY) == 0 &&
+                                it.notification.group == group
+                    } == true
+                } catch (_: Exception) { false }
+            } else false
+            if (hasLiveChild) {
+                Log.d(TAG, "Bỏ qua thông báo Group Summary của ${sbn.packageName} vì đã có thông báo con chi tiết")
+                return
+            }
+        }
+
         val extras = notif.extras ?: return
 
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() ?: ""
-        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim() ?: ""
         if (title.isBlank() && text.isBlank()) return
+        if (title.equals(sbn.packageName, ignoreCase = true) || text.equals(sbn.packageName, ignoreCase = true)) return
 
         val isMessaging = isMessagingApp(sbn)
         val isMedia = isMediaApp(sbn)
@@ -253,7 +275,7 @@ class DynamicNotificationService : NotificationListenerService() {
         if (isMedia && !prefs.isMediaIslandEnabled.first()) return
         if (isMessaging && !prefs.isMessageIslandEnabled.first()) return
 
-        // 1. Kiểm tra bộ lọc thông báo từng ứng dụng do người dùng cấu hình (Blacklist Model)
+        // 2. Kiểm tra bộ lọc thông báo từng ứng dụng do người dùng cấu hình (Blacklist Model)
         val disabledApps = prefs.disabledPackages.first()
         if (!prefs.isPackageAllowed(sbn.packageName, disabledApps)) {
             Log.d(TAG, "Notification from ${sbn.packageName} ignored by user per-app setting")
