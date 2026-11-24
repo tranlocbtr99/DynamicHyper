@@ -14,7 +14,7 @@ class DynamicHyperApp : Application() {
         super.onCreate()
         instance = this
         Log.i(TAG, "DynamicHyperApp initialized successfully")
-        AppLogger.i(TAG, "DynamicHyperApp khởi động phiên bản v2.0.5-beta thành công")
+        AppLogger.i(TAG, "DynamicHyperApp khởi động phiên bản v2.0.6-beta thành công")
 
         // Chú ý Android 12+: Tuyệt đối không gọi startForegroundService trong Application.onCreate()
         // vì sẽ gây ra ForegroundServiceStartNotAllowedException và khiến app bị crash/buộc dừng khi mở lần đầu.

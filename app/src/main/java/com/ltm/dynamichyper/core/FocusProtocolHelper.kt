@@ -27,6 +27,7 @@ object FocusProtocolHelper {
     const val CHANNEL_ID = "dynamic_hyper_focus_channel_v2"
     private const val LEGACY_CHANNEL_ID = "dynamic_hyper_focus_channel"
     const val DEFAULT_ISLAND_PROPERTY = 1
+    const val TEST_ISLAND_ID = 9998
 
     fun setupChannel(context: Context) {
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -42,8 +43,6 @@ object FocusProtocolHelper {
             setSound(null, null)
             enableVibration(false)
             setShowBadge(false)
-            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-            setBypassDnd(true)
             description = "Notification channel powering Xiaomi HyperOS Focus Islands"
         }
         manager.createNotificationChannel(channel)
@@ -253,5 +252,115 @@ object FocusProtocolHelper {
         s.launch {
             ShizukuEngine.postNotificationSafely(context, id, notification)
         }
+    }
+
+    /**
+     * Bắn thông báo Đảo Động Test trực quan:
+     * Bung to 4 giây quanh camera nốt ruồi với hiệu ứng bung to + màu cam nổi bật + âm thầm thu nhỏ về camera.
+     * Giúp người dùng kiểm tra ngay lập tức xem hệ thống HyperOS đã chấp nhận vẽ Đảo hay chưa.
+     */
+    fun sendVisualTestIsland(context: Context) {
+        val root = org.json.JSONObject()
+        val paramV2 = org.json.JSONObject()
+        paramV2.put("protocol", 1)
+        paramV2.put("business", "test_island")
+        paramV2.put("updatable", true)
+        paramV2.put("ticker", "Dynamic Hyper • Test Đảo")
+        paramV2.put("timeout", 60000)
+        paramV2.put("enableFloat", true)
+        paramV2.put("isShowNotification", true)
+        paramV2.put("islandFirstFloat", true)
+        paramV2.put("reopen", true)
+
+        val paramIsland = org.json.JSONObject()
+        paramIsland.put("islandProperty", 1)
+        paramIsland.put("islandPriority", 2)
+        paramIsland.put("islandTimeout", 60000)
+        paramIsland.put("islandOrder", false)
+        paramIsland.put("dismissIsland", false)
+        paramIsland.put("maxSize", false)
+        paramIsland.put("needCloseAnimation", true)
+        paramIsland.put("expandedTime", 4) // Bung to 4 giây rồi tự động thu về nốt ruồi camera
+        paramIsland.put("highlightColor", "#FF9F0A")
+
+        val bigIslandArea = org.json.JSONObject()
+        val leftInfo = org.json.JSONObject()
+        leftInfo.put("type", 1)
+        val leftPic = org.json.JSONObject()
+        leftPic.put("type", 1)
+        leftPic.put("pic", "miui.focus.pic_test_icon")
+        leftInfo.put("picInfo", leftPic)
+        leftInfo.put("textInfo", org.json.JSONObject().apply {
+            put("title", "")
+            put("content", "")
+            put("showHighlightColor", false)
+        })
+        bigIslandArea.put("imageTextInfoLeft", leftInfo)
+
+        val rightInfo = org.json.JSONObject()
+        rightInfo.put("type", 1)
+        val rightPic = org.json.JSONObject()
+        rightPic.put("type", 1)
+        rightPic.put("pic", "miui.focus.pic_hidden_pixel")
+        rightInfo.put("picInfo", rightPic)
+        rightInfo.put("textInfo", org.json.JSONObject().apply {
+            put("title", "⚡ Dynamic Hyper")
+            put("content", "Đảo Động bung to thành công!")
+            put("showHighlightColor", false)
+        })
+        bigIslandArea.put("imageTextInfoRight", rightInfo)
+        paramIsland.put("bigIslandArea", bigIslandArea)
+
+        val smallIslandArea = org.json.JSONObject()
+        val smallPic = org.json.JSONObject()
+        smallPic.put("type", 1)
+        smallPic.put("pic", "miui.focus.pic_test_icon")
+        smallIslandArea.put("smallPictureInfo", smallPic)
+        paramIsland.put("smallIslandArea", smallIslandArea)
+
+        paramV2.put("param_island", paramIsland)
+
+        val baseInfo = org.json.JSONObject()
+        baseInfo.put("type", 1)
+        baseInfo.put("title", "Dynamic Hyper • Test Đảo")
+        baseInfo.put("content", "Đảo Động HyperOS đã kích hoạt thành công!")
+        paramV2.put("baseInfo", baseInfo)
+
+        val iconTextInfo = org.json.JSONObject()
+        iconTextInfo.put("title", "Dynamic Hyper • Test Đảo")
+        iconTextInfo.put("content", "Đảo Động HyperOS đã kích hoạt thành công!")
+        paramV2.put("iconTextInfo", iconTextInfo)
+
+        root.put("param_v2", paramV2)
+        root.put("isShowNotification", true)
+
+        val bmp = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888).apply {
+            val canvas = android.graphics.Canvas(this)
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.parseColor("#FF9F0A")
+            }
+            canvas.drawCircle(48f, 48f, 44f, paint)
+        }
+
+        val pics = mapOf(
+            "test_icon" to bmp,
+            "hidden_pixel" to Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        )
+
+        val notification = buildFocusNotification(
+            context = context,
+            title = "Dynamic Hyper • Test Đảo",
+            content = "Đảo Động HyperOS đã kích hoạt thành công!",
+            smallIconRes = R.drawable.ic_launcher_foreground,
+            jsonParam = root.toString(),
+            pics = pics,
+            isOngoing = false,
+            onlyAlertOnce = false,
+            isSilent = false,
+            priority = NotificationCompat.PRIORITY_HIGH
+        )
+
+        postNotificationSafely(context, TEST_ISLAND_ID, notification)
+        AppLogger.i("DynamicHyper:Test", "Đã bắn thông báo Test Đảo trực quan (id=$TEST_ISLAND_ID, float=true, expanded=4s)")
     }
 }

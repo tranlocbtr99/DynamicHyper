@@ -516,13 +516,14 @@ class DynamicNotificationService : NotificationListenerService() {
 
         FocusProtocolHelper.postNotificationSafely(this, dynamicIslandId, notification, scope = serviceScope)
 
-        // Loại bỏ thông báo gốc của app nhắn tin khỏi Notification Shade (tương tự removeOriginalNotification của HyperBridge)
-        // để người dùng không bị thấy 2 thông báo cùng một lúc
-        if (isNewMessage) {
+        // Loại bỏ thông báo gốc của app nhắn tin khỏi Notification Shade CHỈ KHI người dùng chủ động bật tuỳ chọn
+        // Mặc định giữ thông báo gốc để đảm bảo người dùng không bao giờ bị lỡ tin nhắn
+        val shouldHideOriginal = prefs.isHideOriginalNotification.first()
+        if (isNewMessage && shouldHideOriginal) {
             try {
                 intentionallyRemovedKeys[sbn.key] = System.currentTimeMillis()
                 cancelNotification(sbn.key)
-                com.ltm.dynamichyper.core.AppLogger.i("DynamicNotif", "Đã ẩn thông báo gốc của ${sbn.packageName} để tránh trùng lặp trong trung tâm thông báo")
+                com.ltm.dynamichyper.core.AppLogger.i("DynamicNotif", "Đã ẩn thông báo gốc của ${sbn.packageName} theo cấu hình người dùng")
             } catch (e: Exception) {
                 intentionallyRemovedKeys.remove(sbn.key)
                 Log.w("DynamicNotif", "Không thể cancelNotification cho sbn.key: ${e.message}")

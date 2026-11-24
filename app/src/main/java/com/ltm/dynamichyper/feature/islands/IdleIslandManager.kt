@@ -47,8 +47,8 @@ class IdleIslandManager(
             instance?.reassert()
         }
 
-        fun showIdleIsland(context: Context, width: Int, style: String = "minimal") {
-            instance?.reassert() ?: dispatchDirect(context, width, style)
+        fun showIdleIsland(context: Context, width: Int, style: String = "minimal", force: Boolean = true) {
+            instance?.reassert(force = force) ?: dispatchDirect(context, width, style, force = force)
         }
 
         fun hideIdleIsland(context: Context) {

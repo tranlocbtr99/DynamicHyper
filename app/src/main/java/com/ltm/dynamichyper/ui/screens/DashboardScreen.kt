@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import com.ltm.dynamichyper.feature.islands.IdleIslandManager
+import com.ltm.dynamichyper.core.FocusProtocolHelper
 import com.ltm.dynamichyper.core.OtaUpdateManager
 import com.ltm.dynamichyper.core.PermissionHelper
 import com.ltm.dynamichyper.core.ShizukuEngine
@@ -122,6 +123,7 @@ private fun OverviewTabScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+    val currentVersion = remember { "v${OtaUpdateManager.getCurrentVersion(context).removePrefix("v")}" }
 
     val isIdleIslandEnabled by prefs.isIdleIslandEnabled.collectAsState(initial = true)
     val idleIslandWidth by prefs.idleIslandWidth.collectAsState(initial = 10)
@@ -305,7 +307,7 @@ private fun OverviewTabScreen(
                             style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = AppleBlue)
                         )
                         Text(
-                            text = "v2.0.5-beta",
+                            text = currentVersion,
                             style = Typography.bodySmall.copy(fontSize = 10.sp, color = TextSecondary)
                         )
                     }
@@ -515,11 +517,12 @@ private fun OverviewTabScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             LiquidActionButton(
-                text = "⚡ TEST BẮN ĐẢO NGAY (ÉP HIỂN THỊ)",
+                text = "⚡ TEST BẮN ĐẢO NGAY (BUNG ĐẢO TRỰC QUAN)",
                 onClick = {
                     IdleIslandManager.resetCache()
-                    IdleIslandManager.showIdleIsland(context, idleIslandWidth)
-                    Toast.makeText(context, "Đã gửi lệnh ép vẽ Đảo lên camera notch!", Toast.LENGTH_SHORT).show()
+                    IdleIslandManager.showIdleIsland(context, idleIslandWidth, force = true)
+                    FocusProtocolHelper.sendVisualTestIsland(context)
+                    Toast.makeText(context, "Đang bung Đảo Động Test lên camera notch (4s)...", Toast.LENGTH_SHORT).show()
                 }
             )
         }

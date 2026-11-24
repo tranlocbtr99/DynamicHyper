@@ -114,7 +114,9 @@ object ShizukuEngine {
     }
 
     /**
-     * Chặn mạng com.xiaomi.xmsf qua ShizukuHook (chuẩn HyperBridge IPC) để HyperOS AuthManager bỏ qua kiểm duyệt online.
+     * Khóa mạng vĩnh viễn cho com.xiaomi.xmsf qua ShizukuHook IPC & Shell (Chuẩn HyperBridge LTM v0.6.0-ltm.3).
+     * Khi XMSF không thể kết nối server Xiaomi Cloud, AuthManager của HyperOS sẽ fail-open,
+     * tự động cho phép toàn bộ Focus Notification / Đảo Tiêu Điểm hiển thị mà không bị lỗi -300 hủy thông báo.
      */
     fun applyXmsfBypass(context: Context): Boolean {
         try {
@@ -126,34 +128,38 @@ object ShizukuEngine {
                 return false
             }
 
-            // 1. Thử qua Hook IPC ShizukuBinderWrapper trực tiếp (Chuẩn HyperBridge)
-            val hookSuccess = try {
-                ShizukuHook.setPackageNetworkingEnabled(xmsfUid, false)
+            var anySuccess = false
+
+            // 1. Hook IPC ShizukuBinderWrapper trực tiếp (Chuẩn HyperBridge)
+            try {
+                if (ShizukuHook.setPackageNetworkingEnabled(xmsfUid, false)) {
+                    AppLogger.i(TAG, "✓ Đã khóa mạng XMSF qua ShizukuHook IPC thành công (uid=$xmsfUid)")
+                    anySuccess = true
+                }
             } catch (e: Throwable) {
-                AppLogger.w(TAG, "ShizukuHook IPC thất bại, thử lệnh shell fallback: ${e.message}")
-                false
+                AppLogger.w(TAG, "ShizukuHook IPC thất bại, tiếp tục shell fallback: ${e.message}")
             }
 
-            if (hookSuccess) {
-                AppLogger.i(TAG, "✓ Đã áp dụng XMSF Bypass qua ShizukuHook IPC thành công (uid=$xmsfUid)")
-                return true
-            }
-
-            // 2. Fallback sang lệnh netpolicy / connectivity
+            // 2. Shell fallback: netpolicy blacklist + connectivity chain3 + appops
             val (cNet, outNet) = execCommand("cmd netpolicy add restrict-background-blacklist $xmsfUid")
             if (cNet == 0) {
                 AppLogger.i(TAG, "✓ Đã áp dụng XMSF Bypass qua cmd netpolicy blacklist (uid=$xmsfUid)")
-                return true
+                anySuccess = true
             }
 
-            val (c1, out1) = execCommand("cmd connectivity set-chain3-enabled true")
+            val (c1, _) = execCommand("cmd connectivity set-chain3-enabled true")
             if (c1 == 0) {
-                val (c2, out2) = execCommand("cmd connectivity set-package-networking-enabled false com.xiaomi.xmsf")
+                val (c2, _) = execCommand("cmd connectivity set-package-networking-enabled false com.xiaomi.xmsf")
                 if (c2 == 0) {
                     AppLogger.i(TAG, "✓ Đã áp dụng XMSF Bypass qua cmd connectivity chain3")
-                    return true
+                    anySuccess = true
                 }
             }
+
+            execCommand("cmd appops set com.xiaomi.xmsf RUN_IN_BACKGROUND ignore")
+            execCommand("cmd appops set com.xiaomi.xmsf RUN_ANY_IN_BACKGROUND ignore")
+
+            return anySuccess
         } catch (e: Throwable) {
             AppLogger.e(TAG, "Lỗi khi chạy applyXmsfBypass: ${e.message}", e)
         }
@@ -187,9 +193,10 @@ object ShizukuEngine {
     }
 
     /**
-     * Gửi thông báo an toàn bằng cách tạm thời cô lập mạng của com.xiaomi.xmsf (50ms)
-     * để AuthManager trên HyperOS China ROM bỏ qua bước kiểm duyệt Cloud (-300 error),
-     * sau đó mở lại mạng bình thường sau 100ms. Chuẩn 100% HyperBridge.
+     * Gửi thông báo Đảo Tiêu Điểm an toàn.
+     * Đảm bảo XMSF luôn bị cô lập mạng (không mở lại mạng sau khi bắn) để AuthManager
+     * trên HyperOS China ROM không bao giờ liên lạc được với Cloud để hủy thông báo.
+     * Hoạt động bền vững 24/7 theo chuẩn HyperBridge LTM v0.6.0-ltm.3.
      */
     suspend fun postNotificationSafely(context: Context, id: Int, notification: Notification) {
         notifyMutex.withLock {
@@ -202,22 +209,15 @@ object ShizukuEngine {
 
             if (hasShizukuPermission() && xmsfUid != null) {
                 try {
+                    // Đảm bảo mạng của XMSF luôn bị khóa, không phục hồi mạng
                     ShizukuHook.setPackageNetworkingEnabled(xmsfUid, false)
-                    delay(50L)
-                    NotificationManagerCompat.from(context).notify(id, notification)
-                    Log.d(TAG, "✓ Đã bắn Focus Notification với XMSF bypass (id=$id)")
                 } catch (e: Throwable) {
-                    Log.w(TAG, "Lỗi bắn thông báo XMSF bypass: ${e.message}")
-                    NotificationManagerCompat.from(context).notify(id, notification)
-                } finally {
-                    delay(100L)
-                    try {
-                        ShizukuHook.setPackageNetworkingEnabled(xmsfUid, true)
-                    } catch (_: Throwable) {}
+                    Log.w(TAG, "Lỗi khóa mạng XMSF trước khi notify: ${e.message}")
                 }
-            } else {
-                NotificationManagerCompat.from(context).notify(id, notification)
             }
+
+            NotificationManagerCompat.from(context).notify(id, notification)
+            Log.d(TAG, "✓ Đã bắn Focus Notification thành công (id=$id)")
         }
     }
 }
