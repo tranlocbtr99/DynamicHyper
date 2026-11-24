@@ -116,6 +116,11 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             com.ltm.dynamichyper.core.AppLogger.e("MainActivity", "Lỗi khởi động KeepAliveService trong onResume: ${e.message}")
         }
+
+        // Tự động khôi phục và duy trì Đảo Chờ ngay khi người dùng mở lại ứng dụng
+        try {
+            IdleIslandManager.getInstance()?.refresh()
+        } catch (_: Exception) {}
     }
 
     override fun onDestroy() {

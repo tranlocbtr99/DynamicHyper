@@ -64,10 +64,15 @@ class IdleIslandManager(
         }
 
         fun updateStyle(context: Context, style: String) {
-            instance?.updateStyleInternal(style) ?: dispatchDirect(context, 10, style)
+            instance?.updateStyleInternal(style) ?: dispatchDirect(context, 10, style, force = true)
         }
 
-        fun dispatchDirect(context: Context, width: Int, style: String = "minimal") {
+        fun resetCache() {
+            lastDispatchedWidgetText = ""
+            instance?.isShowing = false
+        }
+
+        fun dispatchDirect(context: Context, width: Int, style: String = "minimal", force: Boolean = false) {
             try {
                 val effectiveWidth = if (width > 0) width else 8
                 val emptyString = "\u00A0".repeat(effectiveWidth)
@@ -185,7 +190,7 @@ class IdleIslandManager(
                 )
 
                 val currentText = "$style|$widgetTitle|$widgetContent|$effectiveWidth"
-                if (lastDispatchedWidgetText == currentText && instance?.isShowing == true) {
+                if (!force && lastDispatchedWidgetText == currentText && instance?.isShowing == true) {
                     return
                 }
                 lastDispatchedWidgetText = currentText
@@ -429,7 +434,8 @@ class IdleIslandManager(
     private var isEnabled = true
     private var islandWidth = 10
     private var islandStyle = "minimal"
-    private var isShowing = false
+    var isShowing = false
+        internal set
     private var activeEventCount = 0
     private var pendingJob: Job? = null
 
@@ -509,14 +515,14 @@ class IdleIslandManager(
     /**
      * Khôi phục Đảo Chờ 24/7 êm ái, có debounce 150ms chống xung đột sự kiện dồn dập
      */
-    fun reassert() {
+    fun reassert(force: Boolean = true) {
         pendingJob?.cancel()
         pendingJob = scope.launch {
             delay(150L)
             if (prefs.isIdleIslandEnabled.first() && activeEventCount <= 0) {
                 val width = prefs.idleIslandWidth.first()
                 val style = prefs.idleIslandStyle.first()
-                dispatchDirect(context, width, style)
+                dispatchDirect(context, width, style, force = force)
                 isShowing = true
                 Log.d(TAG, "Idle Island reasserted successfully with style: $style, width: $width")
             }
@@ -525,7 +531,7 @@ class IdleIslandManager(
 
     @Synchronized
     fun refresh() {
-        reassert()
+        reassert(force = true)
     }
 
     private fun shouldShow(): Boolean = isEnabled

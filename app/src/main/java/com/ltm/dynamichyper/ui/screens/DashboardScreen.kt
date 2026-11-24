@@ -140,6 +140,8 @@ private fun OverviewTabScreen(
     var isPostNotificationGranted by remember { mutableStateOf(PermissionHelper.isPostNotificationGranted(context)) }
     var isFloatingNotificationGranted by remember { mutableStateOf(PermissionHelper.isFloatingNotificationAllowed(context)) }
     var isFeaturedNotificationGranted by remember { mutableStateOf(com.ltm.dynamichyper.core.FocusProtocolHelper.canShowFocus(context) != false) }
+    var isRestrictedAllowed by remember { mutableStateOf(PermissionHelper.isRestrictedSettingsAllowed(context)) }
+    var showRestrictedDialog by remember { mutableStateOf(false) }
     var isBatteryOptimizationIgnored by remember { mutableStateOf(PermissionHelper.isBatteryOptimizationIgnored(context)) }
     var isShizukuReady by remember { mutableStateOf(ShizukuEngine.hasShizukuPermission()) }
     var isLockscreenOpGranted by remember { mutableStateOf(PermissionHelper.isMiuiOpAllowed(context, 10008)) }
@@ -164,6 +166,7 @@ private fun OverviewTabScreen(
                 isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
                 isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
                 isFeaturedNotificationGranted = com.ltm.dynamichyper.core.FocusProtocolHelper.canShowFocus(context) != false
+                isRestrictedAllowed = PermissionHelper.isRestrictedSettingsAllowed(context)
                 isBatteryOptimizationIgnored = PermissionHelper.isBatteryOptimizationIgnored(context)
                 isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, 10008)
                 isAutoStartGranted = PermissionHelper.isAutoStartOrLockscreenGranted(context, isAutoStartMarked)
@@ -187,6 +190,7 @@ private fun OverviewTabScreen(
         isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
         isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
         isFeaturedNotificationGranted = com.ltm.dynamichyper.core.FocusProtocolHelper.canShowFocus(context) != false
+        isRestrictedAllowed = PermissionHelper.isRestrictedSettingsAllowed(context)
         isBatteryOptimizationIgnored = PermissionHelper.isBatteryOptimizationIgnored(context)
         isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, 10008)
         isAutoStartGranted = PermissionHelper.isAutoStartOrLockscreenGranted(context, isAutoStartMarked)
@@ -301,7 +305,7 @@ private fun OverviewTabScreen(
                             style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = AppleBlue)
                         )
                         Text(
-                            text = "v2.0.1-beta",
+                            text = "v2.0.2-beta",
                             style = Typography.bodySmall.copy(fontSize = 10.sp, color = TextSecondary)
                         )
                     }
@@ -364,6 +368,7 @@ private fun OverviewTabScreen(
                         Text(
                             text = when {
                                 !isPostNotificationGranted -> "Chưa Cấp Quyền Thông Báo"
+                                !isNotificationAccessGranted && !isRestrictedAllowed -> "Android Đang Hạn Chế Cài Đặt"
                                 !isFeaturedNotificationGranted -> "Chưa Bật Thông Báo Tiêu Điểm"
                                 !isFloatingNotificationGranted -> "Chưa Bật Thông Báo Nổi (HyperOS)"
                                 else -> "Chưa Bật Truy Cập Thông Báo"
@@ -373,6 +378,7 @@ private fun OverviewTabScreen(
                         Text(
                             text = when {
                                 !isPostNotificationGranted -> "Bắt buộc cấp quyền để Dynamic Hyper hiển thị thông báo."
+                                !isNotificationAccessGranted && !isRestrictedAllowed -> "Cần mở khóa 3 chấm trong Thông tin ứng dụng để cho phép cấp quyền đọc thông báo!"
                                 !isFeaturedNotificationGranted -> "HyperOS cần bạn BẬT 'Thông báo nổi bật' trong Cài đặt thông báo để Đảo hiển thị!"
                                 !isFloatingNotificationGranted -> "Cần bật 'Thông báo nổi' để HyperOS cho phép gắn Đảo lên nốt ruồi camera!"
                                 else -> "Cần cấp quyền để ứng dụng đọc tin nhắn và đưa lên Đảo Động."
@@ -415,7 +421,11 @@ private fun OverviewTabScreen(
                                         }
                                     }
                                     else -> {
-                                        PermissionHelper.openNotificationAccessSettings(context)
+                                        if (!isRestrictedAllowed && !isNotificationAccessGranted) {
+                                            showRestrictedDialog = true
+                                        } else {
+                                            PermissionHelper.openNotificationAccessSettings(context)
+                                        }
                                     }
                                 }
                             }
@@ -586,7 +596,13 @@ private fun OverviewTabScreen(
                 title = "Truy Cập Đọc Thông Báo",
                 icon = Icons.Default.Notifications,
                 isGranted = isNotificationAccessGranted,
-                onActionClick = { PermissionHelper.openNotificationAccessSettings(context) }
+                onActionClick = {
+                    if (!isRestrictedAllowed && !isNotificationAccessGranted) {
+                        showRestrictedDialog = true
+                    } else {
+                        PermissionHelper.openNotificationAccessSettings(context)
+                    }
+                }
             )
 
             HorizontalDivider(color = GlassBorderSubtle)
@@ -902,6 +918,57 @@ private fun OverviewTabScreen(
                 modifier = Modifier.clickable { showTermsDialog = true }
             )
         }
+    }
+
+    if (showRestrictedDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestrictedDialog = false },
+            containerColor = Color(0xFF1E1E22),
+            icon = {
+                Icon(
+                    Icons.Default.Security,
+                    contentDescription = null,
+                    tint = AppleOrange,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Mở Khóa Cài Đặt Bị Hạn Chế",
+                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color.White)
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Android 13/14+ mặc định hạn chế quyền đọc thông báo đối với ứng dụng cài ngoài CH Play.",
+                        style = Typography.bodyMedium.copy(color = Color.White.copy(alpha = 0.9f))
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Cách mở khóa trong 3 bước:\n1. Bấm nút \"Mở Thông Tin Ứng Dụng\" bên dưới.\n2. Bấm vào biểu tượng 3 chấm (⋮) ở góc trên bên phải màn hình.\n3. Chọn \"Cho phép cài đặt bị hạn chế\".\n4. Quay lại Dynamic Hyper để cấp quyền đọc thông báo bình thường.",
+                        style = Typography.bodySmall.copy(color = Color.White.copy(alpha = 0.75f), lineHeight = 18.sp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showRestrictedDialog = false
+                        PermissionHelper.openAppDetailsSettings(context)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AppleOrange),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Mở Thông Tin Ứng Dụng", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestrictedDialog = false }) {
+                    Text("Để Sau", color = TextSecondary)
+                }
+            }
+        )
     }
 
     if (showDiagnosticDialog) {

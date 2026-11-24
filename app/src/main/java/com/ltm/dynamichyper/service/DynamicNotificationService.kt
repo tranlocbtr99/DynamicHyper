@@ -98,7 +98,9 @@ class DynamicNotificationService : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         Log.i(TAG, "NotificationListener Connected successfully")
-        idleIslandManager.refresh()
+        idleIslandManager.isShowing = false
+        IdleIslandManager.resetCache()
+        idleIslandManager.reassert(force = true)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -151,9 +153,11 @@ class DynamicNotificationService : NotificationListenerService() {
             when (sbn.id) {
                 IdleIslandManager.IDLE_ISLAND_ID -> {
                     Log.i(TAG, "Idle Island (9999) was removed. Auto-restoring immediately...")
+                    idleIslandManager.isShowing = false
+                    IdleIslandManager.resetCache()
                     serviceScope.launch {
                         delay(150L)
-                        idleIslandManager.reassert()
+                        idleIslandManager.reassert(force = true)
                     }
                 }
                 CallIslandManager.CALL_ISLAND_ID -> {
@@ -169,7 +173,18 @@ class DynamicNotificationService : NotificationListenerService() {
                     Log.i(TAG, "Feature island ${sbn.id} ended. Returning to Idle Island...")
                     serviceScope.launch {
                         delay(150L)
-                        idleIslandManager.reassert()
+                        idleIslandManager.reassert(force = true)
+                    }
+                }
+                else -> {
+                    // Người dùng vuốt xóa hoặc đóng thông báo Đảo Động của tin nhắn/app
+                    val matchingKey = activeDynamicIslands.entries.firstOrNull { it.value == sbn.id }?.key
+                    if (matchingKey != null) {
+                        activeDynamicIslands.remove(matchingKey)
+                        activeDismissJobs.remove(matchingKey)?.cancel()
+                        lastNotificationContent.remove(matchingKey)
+                        Log.i(TAG, "Dynamic Island notification (id=${sbn.id}) removed by user. Remaining islands: ${activeDynamicIslands.size}")
+                        idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
                     }
                 }
             }

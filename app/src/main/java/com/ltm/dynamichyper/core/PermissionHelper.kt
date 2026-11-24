@@ -42,6 +42,33 @@ object PermissionHelper {
         return Settings.canDrawOverlays(context)
     }
 
+    /**
+     * Kiểm tra trạng thái "Cài đặt bị hạn chế" (Restricted Settings) của Android 13/14+.
+     * Với file APK cài ngoài, Android sẽ chặn quyền đọc thông báo trừ khi người dùng
+     * mở khóa qua menu 3 chấm trong Thông tin ứng dụng.
+     */
+    fun isRestrictedSettingsAllowed(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        return try {
+            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
+            val method = AppOpsManager::class.java.getMethod(
+                "unsafeCheckOpNoThrow",
+                String::class.java,
+                Int::class.javaPrimitiveType,
+                String::class.java
+            )
+            val mode = method.invoke(
+                appOps,
+                "android:access_restricted_settings",
+                Process.myUid(),
+                context.packageName
+            ) as Int
+            mode == AppOpsManager.MODE_ALLOWED
+        } catch (_: Throwable) {
+            true
+        }
+    }
+
     fun canRequestPackageInstalls(context: Context): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.packageManager.canRequestPackageInstalls()
@@ -225,6 +252,30 @@ object PermissionHelper {
             },
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                 data = Uri.parse("package:$packageName")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+        )
+        for (intent in intents) {
+            try {
+                context.startActivity(intent)
+                return
+            } catch (_: Exception) {}
+        }
+    }
+
+    /**
+     * Mở trực tiếp trang Tiết kiệm pin của MIUI/HyperOS (HiddenAppsConfigActivity)
+     * để người dùng chọn "Không hạn chế" (No restrictions).
+     */
+    fun openMiuiBatterySaver(context: Context) {
+        val intents = listOf(
+            Intent().apply {
+                component = ComponentName("com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity")
+                putExtra("package_name", context.packageName)
+                putExtra("package_label", context.getString(com.ltm.dynamichyper.R.string.app_name))
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            },
+            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
         )
