@@ -42,6 +42,13 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         prefs = PreferencesManager(this)
 
+        // Tự động yêu cầu quyền gửi thông báo trên Android 13+ (HyperOS)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
+            }
+        }
+
         try {
             Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
             Shizuku.addRequestPermissionResultListener(requestPermissionResultListener)

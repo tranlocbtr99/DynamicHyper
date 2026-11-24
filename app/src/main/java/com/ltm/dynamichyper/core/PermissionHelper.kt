@@ -167,9 +167,9 @@ object PermissionHelper {
     }
 
     /**
-     * Mở trực tiếp trang cài đặt thông báo của ứng dụng để tắt thủ công
+     * Mở trực tiếp trang cài đặt thông báo của ứng dụng để bật/tắt thủ công
      */
-    fun openAppNotificationSettings(context: Context, packageName: String) {
+    fun openAppNotificationSettings(context: Context, packageName: String = context.packageName) {
         val intents = listOf(
             Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
                 putExtra(Settings.EXTRA_APP_PACKAGE, packageName)

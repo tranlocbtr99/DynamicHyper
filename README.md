@@ -5,7 +5,7 @@
 
 [![Platform](https://img.shields.io/badge/Platform-Xiaomi%20HyperOS-blue?style=flat-square&logo=android)](https://github.com/tranlocbtr99/DynamicHyper)
 [![Language](https://img.shields.io/badge/Language-Kotlin%20%2F%20Jetpack%20Compose-purple?style=flat-square&logo=kotlin)](https://kotlinlang.org)
-[![Version](https://img.shields.io/badge/Release-v1.5.1-success?style=flat-square)](https://github.com/tranlocbtr99/DynamicHyper/releases/latest)
+[![Version](https://img.shields.io/badge/Release-v1.5.2-success?style=flat-square)](https://github.com/tranlocbtr99/DynamicHyper/releases/latest)
 [![License](https://img.shields.io/badge/License-Proprietary%20%2F%20All%20Rights%20Reserved-red?style=flat-square)](#-bản-quyền--điều-khoản-sở-hữu-trí-tuệ-license)
 
 ---
@@ -50,7 +50,7 @@
 ## 📥 Tải về & Cài đặt
 
 Bản phát hành chính thức mới nhất luôn có sẵn tại:
-👉 **[Tải APK Dynamic Hyper v1.5.1 (GitHub Releases)](https://github.com/tranlocbtr99/DynamicHyper/releases/latest/download/DynamicHyper-v1.5.1.apk)**
+👉 **[Tải APK Dynamic Hyper v1.5.2 (GitHub Releases)](https://github.com/tranlocbtr99/DynamicHyper/releases/latest/download/DynamicHyper-v1.5.2.apk)**
 
 ### Các quyền cần thiết:
 1. **Truy cập Thông báo (Notification Listener)**: Để nhận và hiển thị thông báo ứng dụng lên đảo.

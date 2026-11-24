@@ -1,10 +1,14 @@
 package com.ltm.dynamichyper.ui.screens
 
+import android.Manifest
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -133,11 +137,39 @@ private fun OverviewTabScreen(
     val bankOwner by prefs.bankOwner.collectAsState(initial = "Tran Minh Loc")
 
     var isNotificationAccessGranted by remember { mutableStateOf(PermissionHelper.isNotificationAccessGranted(context)) }
+    var isPostNotificationGranted by remember { mutableStateOf(PermissionHelper.isPostNotificationGranted(context)) }
     var isBatteryOptimizationIgnored by remember { mutableStateOf(PermissionHelper.isBatteryOptimizationIgnored(context)) }
     var isShizukuReady by remember { mutableStateOf(ShizukuEngine.hasShizukuPermission()) }
     var isLockscreenOpGranted by remember { mutableStateOf(PermissionHelper.isMiuiOpAllowed(context, 10008)) }
     var isAutoStartGranted by remember {
         mutableStateOf(PermissionHelper.isAutoStartOrLockscreenGranted(context, isAutoStartMarked))
+    }
+
+    val postNotificationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        isPostNotificationGranted = isGranted
+        if (!isGranted) {
+            Toast.makeText(context, "Cần cấp quyền để Dynamic Hyper hiển thị thông báo đảo", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                isPostNotificationGranted = PermissionHelper.isPostNotificationGranted(context)
+                isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
+                isBatteryOptimizationIgnored = PermissionHelper.isBatteryOptimizationIgnored(context)
+                isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, 10008)
+                isAutoStartGranted = PermissionHelper.isAutoStartOrLockscreenGranted(context, isAutoStartMarked)
+                isShizukuReady = ShizukuEngine.hasShizukuPermission()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
 
     var showTermsDialog by remember { mutableStateOf(false) }
@@ -146,6 +178,7 @@ private fun OverviewTabScreen(
     var isCheckingUpdate by remember { mutableStateOf(false) }
 
     LaunchedEffect(isAutoStartMarked) {
+        isPostNotificationGranted = PermissionHelper.isPostNotificationGranted(context)
         isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
         isBatteryOptimizationIgnored = PermissionHelper.isBatteryOptimizationIgnored(context)
         isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, 10008)
@@ -155,6 +188,7 @@ private fun OverviewTabScreen(
 
     val isInstallGranted = PermissionHelper.canRequestPackageInstalls(context)
     val grantedCount = listOf(
+        isPostNotificationGranted,
         isNotificationAccessGranted,
         isLockscreenOpGranted || isNotificationAccessGranted,
         isBatteryOptimizationIgnored,
@@ -181,7 +215,7 @@ private fun OverviewTabScreen(
 
         // Hàng tinh gọn OTA & Ủng Hộ Tác Giả (Compact Dual-Bubble Row)
         CompactOtaAndDonateRow(
-            currentVersion = "v1.5.1",
+            currentVersion = "v1.5.2",
             isCheckingUpdate = isCheckingUpdate,
             onCheckUpdateClick = {
                 scope.launch {
@@ -191,7 +225,7 @@ private fun OverviewTabScreen(
                     if (update != null && update.hasUpdate) {
                         updateInfoState = update
                     } else {
-                        Toast.makeText(context, "Bạn đang dùng phiên bản mới nhất (v1.5.0)!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Bạn đang dùng phiên bản mới nhất (v1.5.2)!", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
@@ -199,6 +233,75 @@ private fun OverviewTabScreen(
                 showDonateDialog = true
             }
         )
+
+        // Cảnh báo & Nút Cấp Quyền Nhanh khi thiếu quyền Thông Báo
+        if (!isPostNotificationGranted || !isNotificationAccessGranted) {
+            LiquidGlassCard(
+                hazeState = hazeState,
+                modifier = Modifier
+                    .border(1.dp, AppleOrange.copy(alpha = 0.4f), RoundedCornerShape(26.dp))
+                    .background(AppleOrange.copy(alpha = 0.12f), RoundedCornerShape(26.dp))
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(AppleOrange.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = AppleOrange,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (!isPostNotificationGranted) "Chưa Cấp Quyền Thông Báo" else "Chưa Bật Truy Cập Thông Báo",
+                            style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = AppleOrange)
+                        )
+                        Text(
+                            text = if (!isPostNotificationGranted)
+                                "Bắt buộc cấp quyền để Dynamic Hyper hiển thị đảo camera và thẻ nổi."
+                            else
+                                "Cần cấp quyền để ứng dụng đọc tin nhắn và đưa lên Đảo Động.",
+                            style = Typography.bodySmall.copy(color = TextSecondary, fontSize = 11.sp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(AppleOrange)
+                            .clickable {
+                                if (!isPostNotificationGranted) {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                        postNotificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        PermissionHelper.openAppNotificationSettings(context)
+                                    }
+                                } else {
+                                    PermissionHelper.openNotificationAccessSettings(context)
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            text = "Cấp Ngay",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+            }
+        }
 
         // Nút kích hoạt nhanh tất cả
         LiquidGlassCard(hazeState = hazeState) {
@@ -226,7 +329,7 @@ private fun OverviewTabScreen(
                         style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                     Text(
-                        text = if (isNotificationAccessGranted) "Hệ thống đang hoạt động ổn định" else "Tự động cấp toàn bộ quyền và tối ưu Xiaomi",
+                        text = if (isNotificationAccessGranted && isPostNotificationGranted) "Hệ thống đang hoạt động ổn định" else "Tự động cấp toàn bộ quyền và tối ưu Xiaomi",
                         style = Typography.bodyMedium.copy(fontSize = 12.sp, color = TextSecondary)
                     )
                 }
@@ -244,6 +347,7 @@ private fun OverviewTabScreen(
                             val success = ShizukuEngine.applyOneTouchOptimizations(context)
                             isShizukuReady = true
                             isNotificationAccessGranted = true
+                            isPostNotificationGranted = true
                             isBatteryOptimizationIgnored = true
                             isAutoStartGranted = true
                             isLockscreenOpGranted = true
@@ -255,7 +359,11 @@ private fun OverviewTabScreen(
                             ).show()
                         }
                     } else {
-                        PermissionHelper.openNotificationAccessSettings(context)
+                        if (!isPostNotificationGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            postNotificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            PermissionHelper.openNotificationAccessSettings(context)
+                        }
                     }
                 }
             )
@@ -275,13 +383,13 @@ private fun OverviewTabScreen(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (grantedCount == 5) AppleTeal.copy(alpha = 0.2f) else AppleOrange.copy(alpha = 0.2f))
+                        .background(if (grantedCount == 6) AppleTeal.copy(alpha = 0.2f) else AppleOrange.copy(alpha = 0.2f))
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = if (grantedCount == 5) "Hoàn hảo 5/5" else "$grantedCount/5 Đã cấp",
+                        text = if (grantedCount == 6) "Hoàn hảo 6/6" else "$grantedCount/6 Đã cấp",
                         style = Typography.labelSmall.copy(
-                            color = if (grantedCount == 5) AppleTeal else AppleOrange,
+                            color = if (grantedCount == 6) AppleTeal else AppleOrange,
                             fontWeight = FontWeight.Bold
                         )
                     )
@@ -292,7 +400,22 @@ private fun OverviewTabScreen(
             HorizontalDivider(color = GlassBorderSubtle)
 
             CompactPermissionItem(
-                title = "Truy Cập Thông Báo",
+                title = "Cho Phép Gửi Thông Báo (App)",
+                icon = Icons.Default.NotificationsActive,
+                isGranted = isPostNotificationGranted,
+                onActionClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !isPostNotificationGranted) {
+                        postNotificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        PermissionHelper.openAppNotificationSettings(context)
+                    }
+                }
+            )
+
+            HorizontalDivider(color = GlassBorderSubtle)
+
+            CompactPermissionItem(
+                title = "Truy Cập Đọc Thông Báo",
                 icon = Icons.Default.Notifications,
                 isGranted = isNotificationAccessGranted,
                 onActionClick = { PermissionHelper.openNotificationAccessSettings(context) }
