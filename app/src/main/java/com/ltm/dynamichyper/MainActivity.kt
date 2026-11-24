@@ -54,6 +54,14 @@ class MainActivity : ComponentActivity() {
             Shizuku.addRequestPermissionResultListener(requestPermissionResultListener)
         } catch (_: Throwable) {}
 
+        // Kiểm tra và tự động áp dụng quyền Shizuku 10020 & 10008 ngay khi mở app
+        if (ShizukuEngine.hasShizukuPermission()) {
+            CoroutineScope(Dispatchers.IO).launch {
+                ShizukuEngine.applyOneTouchOptimizations(this@MainActivity)
+                com.ltm.dynamichyper.core.AppLogger.i("MainActivity", "Tự động áp dụng tối ưu hóa Shizuku & cấp Op 10020 thành công")
+            }
+        }
+
         // Tự động khởi động Đảo Chờ nếu đã bật trong thiết lập
         CoroutineScope(Dispatchers.Main).launch {
             val isIdle = prefs.isIdleIslandEnabled.first()

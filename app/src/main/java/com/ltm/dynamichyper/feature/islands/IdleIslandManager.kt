@@ -79,8 +79,9 @@ class IdleIslandManager(
                 // enableFloat: BẮT BUỘC TRUE ĐỂ HYPEROS ATTACH ĐẢO VÀO CAMERA NOTCH!
                 paramV2.put("enableFloat", true)
                 paramV2.put("isShowNotification", true)
-                paramV2.put("islandFirstFloat", false)
-                paramV2.put("reopen", false)
+                // islandFirstFloat: BẮT BUỘC TRUE ĐỂ HYPEROS SYSTEMUI KHỞI TẠO NEO VỊ TRÍ NỔI BAN ĐẦU!
+                paramV2.put("islandFirstFloat", true)
+                paramV2.put("reopen", true)
 
                 val paramIsland = org.json.JSONObject()
                 paramIsland.put("islandProperty", 1)
@@ -187,7 +188,7 @@ class IdleIslandManager(
                     jsonParam = root.toString(),
                     pics = pics,
                     isOngoing = true,
-                    onlyAlertOnce = true,
+                    onlyAlertOnce = false,
                     priority = androidx.core.app.NotificationCompat.PRIORITY_HIGH,
                     contentIntent = contentIntent
                 )

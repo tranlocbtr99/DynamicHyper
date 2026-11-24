@@ -46,7 +46,17 @@ object OtaUpdateManager {
 
     suspend fun checkUpdate(context: Context? = null): UpdateInfo? = withContext(Dispatchers.IO) {
         try {
-            val apiUrl = "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
+            val curVer = if (context != null) getCurrentVersion(context) else "1.5.4"
+            val isBetaChannel = curVer.contains("beta", ignoreCase = true)
+
+            // Nếu đang dùng bản beta -> gọi endpoint danh sách releases để lấy bản beta mới nhất
+            // Nếu bản chính thức -> gọi latest release
+            val apiUrl = if (isBetaChannel) {
+                "https://api.github.com/repos/$GITHUB_REPO/releases"
+            } else {
+                "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
+            }
+
             val connection = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 setRequestProperty("Accept", "application/vnd.github+json")
@@ -57,12 +67,28 @@ object OtaUpdateManager {
 
             if (connection.responseCode == 200) {
                 val json = connection.inputStream.bufferedReader().use { it.readText() }
-                val root = JsonParser.parseString(json).asJsonObject
-                val tagName = root.get("tag_name")?.asString?.removePrefix("v") ?: ""
-                val body = root.get("body")?.asString ?: "Cập nhật hiệu năng và sửa lỗi."
+                val rootObj = if (isBetaChannel) {
+                    val releases = JsonParser.parseString(json).asJsonArray
+                    // Tìm release beta mới nhất hoặc release đầu tiên
+                    var chosen = releases[0].asJsonObject
+                    for (rel in releases) {
+                        val relObj = rel.asJsonObject
+                        val t = relObj.get("tag_name")?.asString ?: ""
+                        if (t.contains("beta", ignoreCase = true)) {
+                            chosen = relObj
+                            break
+                        }
+                    }
+                    chosen
+                } else {
+                    JsonParser.parseString(json).asJsonObject
+                }
+
+                val tagName = rootObj.get("tag_name")?.asString?.removePrefix("v") ?: ""
+                val body = rootObj.get("body")?.asString ?: "Cập nhật hiệu năng và sửa lỗi."
 
                 var downloadUrl = ""
-                val assets = root.getAsJsonArray("assets")
+                val assets = rootObj.getAsJsonArray("assets")
                 if (assets != null && assets.size() > 0) {
                     for (asset in assets) {
                         val assetObj = asset.asJsonObject
@@ -74,7 +100,6 @@ object OtaUpdateManager {
                     }
                 }
 
-                val curVer = if (context != null) getCurrentVersion(context) else "1.5.3"
                 val hasNewer = isNewerVersion(curVer, tagName)
                 UpdateInfo(
                     hasUpdate = hasNewer,
@@ -93,8 +118,14 @@ object OtaUpdateManager {
 
     private fun isNewerVersion(current: String, latest: String): Boolean {
         if (latest.isBlank()) return false
-        val curParts = current.split(".").mapNotNull { it.toIntOrNull() }
-        val latParts = latest.split(".").mapNotNull { it.toIntOrNull() }
+        if (current == latest) return false
+
+        // Chuẩn hóa dạng số (loại bỏ -beta hoặc v)
+        val curClean = current.substringBefore("-").removePrefix("v")
+        val latClean = latest.substringBefore("-").removePrefix("v")
+
+        val curParts = curClean.split(".").mapNotNull { it.toIntOrNull() }
+        val latParts = latClean.split(".").mapNotNull { it.toIntOrNull() }
 
         val size = maxOf(curParts.size, latParts.size)
         for (i in 0 until size) {
@@ -103,6 +134,12 @@ object OtaUpdateManager {
             if (l > c) return true
             if (l < c) return false
         }
+
+        // Nếu phần số bằng nhau (ví dụ 1.5.4 và 1.5.4-beta), so sánh hậu tố
+        val curBetaNum = current.substringAfter("beta", "").filter { it.isDigit() }.toIntOrNull() ?: 0
+        val latBetaNum = latest.substringAfter("beta", "").filter { it.isDigit() }.toIntOrNull() ?: 0
+        if (latBetaNum > curBetaNum) return true
+
         return false
     }
 

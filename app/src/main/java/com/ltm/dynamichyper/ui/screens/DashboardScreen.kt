@@ -297,7 +297,7 @@ private fun OverviewTabScreen(
                             style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = AppleBlue)
                         )
                         Text(
-                            text = "v1.5.4-beta",
+                            text = "v1.5.5-beta",
                             style = Typography.bodySmall.copy(fontSize = 10.sp, color = TextSecondary)
                         )
                     }
@@ -329,8 +329,8 @@ private fun OverviewTabScreen(
             }
         }
 
-        // Cảnh báo & Nút Cấp Quyền Nhanh khi thiếu quyền Thông Báo
-        if (!isPostNotificationGranted || !isNotificationAccessGranted) {
+        // Cảnh báo & Nút Cấp Quyền Nhanh khi thiếu quyền Thông Báo hoặc Thông Báo Nổi
+        if (!isPostNotificationGranted || !isNotificationAccessGranted || !isFloatingNotificationGranted) {
             LiquidGlassCard(
                 hazeState = hazeState,
                 modifier = Modifier
@@ -358,14 +358,19 @@ private fun OverviewTabScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (!isPostNotificationGranted) "Chưa Cấp Quyền Thông Báo" else "Chưa Bật Truy Cập Thông Báo",
+                            text = when {
+                                !isPostNotificationGranted -> "Chưa Cấp Quyền Thông Báo"
+                                !isFloatingNotificationGranted -> "Chưa Bật Thông Báo Nổi (HyperOS)"
+                                else -> "Chưa Bật Truy Cập Thông Báo"
+                            },
                             style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, color = AppleOrange)
                         )
                         Text(
-                            text = if (!isPostNotificationGranted)
-                                "Bắt buộc cấp quyền để Dynamic Hyper hiển thị đảo camera và thẻ nổi."
-                            else
-                                "Cần cấp quyền để ứng dụng đọc tin nhắn và đưa lên Đảo Động.",
+                            text = when {
+                                !isPostNotificationGranted -> "Bắt buộc cấp quyền để Dynamic Hyper hiển thị thông báo."
+                                !isFloatingNotificationGranted -> "Cần bật 'Thông báo nổi' để HyperOS cho phép gắn Đảo lên nốt ruồi camera!"
+                                else -> "Cần cấp quyền để ứng dụng đọc tin nhắn và đưa lên Đảo Động."
+                            },
                             style = Typography.bodySmall.copy(color = TextSecondary, fontSize = 11.sp)
                         )
                     }
@@ -375,20 +380,32 @@ private fun OverviewTabScreen(
                             .clip(RoundedCornerShape(10.dp))
                             .background(AppleOrange)
                             .clickable {
-                                if (!isPostNotificationGranted) {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        postNotificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    } else {
-                                        PermissionHelper.openAppNotificationSettings(context)
+                                when {
+                                    !isPostNotificationGranted -> {
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            postNotificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        } else {
+                                            PermissionHelper.openAppNotificationSettings(context)
+                                        }
                                     }
-                                } else {
-                                    PermissionHelper.openNotificationAccessSettings(context)
+                                    !isFloatingNotificationGranted -> {
+                                        if (isShizukuReady) {
+                                            PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
+                                            isFloatingNotificationGranted = true
+                                            Toast.makeText(context, "Đã bật Thông Báo Nổi qua Shizuku!", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            PermissionHelper.openMiuiOtherPermissions(context)
+                                        }
+                                    }
+                                    else -> {
+                                        PermissionHelper.openNotificationAccessSettings(context)
+                                    }
                                 }
                             }
                             .padding(horizontal = 12.dp, vertical = 7.dp)
                     ) {
                         Text(
-                            text = "Cấp Ngay",
+                            text = "Bật Ngay",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp
