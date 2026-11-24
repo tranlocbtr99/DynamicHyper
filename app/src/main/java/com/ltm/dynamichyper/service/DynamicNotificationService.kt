@@ -367,20 +367,20 @@ class DynamicNotificationService : NotificationListenerService() {
         val root = JSONObject()
         val paramV2 = JSONObject()
         paramV2.put("protocol", 1)
-        paramV2.put("business", "taxi")
+        paramV2.put("business", "bridge_${sbn.packageName}")
         paramV2.put("updatable", true)
         paramV2.put("ticker", if (text.isNotBlank()) "$title: $text" else title)
-        paramV2.put("timeout", 1440)
+        paramV2.put("timeout", 86400000)
         paramV2.put("enableFloat", true)
         paramV2.put("isShowNotification", true)
         // islandFirstFloat: chỉ bung to khi là tin nhắn mới, media/update tuyệt đối không bung
         paramV2.put("islandFirstFloat", isNewMessage)
-        paramV2.put("reopen", false) // KHÔNG BAO GIỜ REOPEN LIÊN TỤC
+        paramV2.put("reopen", isNewMessage) // Chuẩn HyperBridge: thông báo mới cần reopen để SystemUI kích hoạt vẽ đảo viên thuốc
 
         val paramIsland = JSONObject()
         paramIsland.put("islandProperty", 1)
         paramIsland.put("islandPriority", 2)
-        paramIsland.put("islandTimeout", 86400)
+        paramIsland.put("islandTimeout", 86400000)
         paramIsland.put("islandOrder", false)
         paramIsland.put("dismissIsland", false)
         paramIsland.put("maxSize", false)

@@ -199,11 +199,28 @@ object FocusProtocolHelper {
             notif.flags = notif.flags or Notification.FLAG_ONGOING_EVENT or Notification.FLAG_NO_CLEAR
         }
         notif.extras.putString("miui.focus.param", patchedJson)
-        // Đồng bộ miui.focus.param.custom theo chuẩn HyperBridge để SystemUI HyperOS 3 và HyperOS 4 luôn nhận diện được
+        notif.extras.putString("miui.focus.ticker", title)
+
+        // Đồng bộ miui.focus.param.custom theo chuẩn HyperBridge (ParamCustom) để SystemUI HyperOS 3 và HyperOS 4 luôn nhận diện được
         try {
             val rootObj = JsonParser.parseString(patchedJson).asJsonObject
-            val customObj = rootObj.getAsJsonObject("param_v2") ?: rootObj
-            notif.extras.putString("miui.focus.param.custom", Gson().toJson(customObj))
+            val paramV2 = rootObj.getAsJsonObject("param_v2")
+            if (paramV2 != null) {
+                val customObj = JsonObject()
+                if (paramV2.has("ticker")) customObj.add("ticker", paramV2.get("ticker"))
+                if (paramV2.has("enableFloat")) customObj.add("enableFloat", paramV2.get("enableFloat"))
+                if (paramV2.has("updatable")) customObj.add("updatable", paramV2.get("updatable"))
+                if (paramV2.has("isShowNotification")) customObj.add("isShowNotification", paramV2.get("isShowNotification"))
+                if (paramV2.has("islandFirstFloat")) customObj.add("islandFirstFloat", paramV2.get("islandFirstFloat"))
+                if (paramV2.has("timeout")) customObj.add("timeout", paramV2.get("timeout"))
+                if (paramV2.has("reopen")) customObj.add("reopen", paramV2.get("reopen"))
+                if (paramV2.has("outEffectSrc")) customObj.add("outEffectSrc", paramV2.get("outEffectSrc"))
+                if (paramV2.has("aodTitle")) customObj.add("aodTitle", paramV2.get("aodTitle"))
+                if (paramV2.has("param_island")) customObj.add("param_island", paramV2.get("param_island"))
+                notif.extras.putString("miui.focus.param.custom", Gson().toJson(customObj))
+            } else {
+                notif.extras.putString("miui.focus.param.custom", patchedJson)
+            }
         } catch (_: Exception) {}
         return notif
     }

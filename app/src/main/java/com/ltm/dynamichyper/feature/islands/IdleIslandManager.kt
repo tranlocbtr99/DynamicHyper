@@ -30,7 +30,7 @@ class IdleIslandManager(
     private val prefs: PreferencesManager
 ) {
     companion object {
-        const val IDLE_ISLAND_ID = 6666
+        const val IDLE_ISLAND_ID = 9999
         private const val PIC_IDLE_DOT = "idle_dot"
         private const val PIC_IDLE_LEFT = "idle_left"
         private const val TAG = "DynamicHyper_Idle"
@@ -80,27 +80,28 @@ class IdleIslandManager(
                 val root = org.json.JSONObject()
                 val paramV2 = org.json.JSONObject()
                 paramV2.put("protocol", 1)
-                paramV2.put("business", "taxi")
+                paramV2.put("business", "permanent_island")
                 paramV2.put("updatable", true)
-                paramV2.put("ticker", "Dynamic Hyper")
-                paramV2.put("timeout", 1440)
-                // enableFloat: Đảo Chờ luôn để false để TUYỆT ĐỐI KHÔNG bung to heads-up banner che màn hình!
+                paramV2.put("ticker", "Permanent Island")
+                paramV2.put("timeout", 86400000)
+                // enableFloat: false để không bung heads-up banner
                 paramV2.put("enableFloat", false)
-                // isShowNotification: Bắt buộc true để HyperOS SystemUI chấp nhận và hiển thị Đảo Chờ trên mọi dòng máy
+                // isShowNotification: true bắt buộc để SystemUI chấp nhận hiển thị trên status bar
                 paramV2.put("isShowNotification", true)
-                // islandFirstFloat & reopen: FALSE để KHÔNG bao giờ tự bung to chiếm màn hình
+                // islandFirstFloat: false
                 paramV2.put("islandFirstFloat", false)
-                paramV2.put("reopen", false)
+                // reopen: true chuẩn HyperBridge để đảo luôn được vẽ lại tại nốt ruồi
+                paramV2.put("reopen", true)
 
                 val paramIsland = org.json.JSONObject()
                 paramIsland.put("islandProperty", 1)
-                paramIsland.put("islandPriority", 1) // Ưu tiên thấp nhất để tự động nhường 100% cho thông báo
-                paramIsland.put("islandTimeout", 86400)
+                paramIsland.put("islandPriority", 2)
+                paramIsland.put("islandTimeout", 86400000)
                 paramIsland.put("islandOrder", false)
                 paramIsland.put("dismissIsland", false)
                 paramIsland.put("maxSize", false)
-                paramIsland.put("needCloseAnimation", false)
-                paramIsland.put("expandedTime", 0) // 0 giây: Đảo Chờ luôn ở trạng thái viên thuốc gọn gàng, không bung to
+                paramIsland.put("needCloseAnimation", true)
+                paramIsland.put("expandedTime", 0)
 
                 // Tính toán nội dung tiêu đề và màu sắc
                 val weather = WeatherManager.currentData
@@ -169,7 +170,7 @@ class IdleIslandManager(
                 paramV2.put("iconTextInfo", iconTextInfo)
 
                 root.put("param_v2", paramV2)
-                root.put("isShowNotification", false)
+                root.put("isShowNotification", true)
 
                 val dotBitmap = renderIdleDotBitmap(context, style)
                 val leftBitmap = renderBigWidgetIcon(context, style)
