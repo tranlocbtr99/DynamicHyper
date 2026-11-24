@@ -76,8 +76,8 @@ class IdleIslandManager(
                 paramV2.put("updatable", true)
                 paramV2.put("ticker", "Dynamic Hyper")
                 paramV2.put("timeout", 0)
-                // enableFloat: LUÔN LUÔN LÀ FALSE ĐỂ ĐẢO CHỜ NẰM IM TUYỆT ĐỐI, KHÔNG BAO GIỜ TỰ BUNG TO!
-                paramV2.put("enableFloat", false)
+                // enableFloat: BẮT BUỘC TRUE ĐỂ HYPEROS ATTACH ĐẢO VÀO CAMERA NOTCH!
+                paramV2.put("enableFloat", true)
                 paramV2.put("isShowNotification", true)
                 paramV2.put("islandFirstFloat", false)
                 paramV2.put("reopen", false)
@@ -188,7 +188,7 @@ class IdleIslandManager(
                     pics = pics,
                     isOngoing = true,
                     onlyAlertOnce = true,
-                    priority = androidx.core.app.NotificationCompat.PRIORITY_LOW,
+                    priority = androidx.core.app.NotificationCompat.PRIORITY_HIGH,
                     contentIntent = contentIntent
                 )
 

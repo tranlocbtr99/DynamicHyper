@@ -138,6 +138,7 @@ private fun OverviewTabScreen(
 
     var isNotificationAccessGranted by remember { mutableStateOf(PermissionHelper.isNotificationAccessGranted(context)) }
     var isPostNotificationGranted by remember { mutableStateOf(PermissionHelper.isPostNotificationGranted(context)) }
+    var isFloatingNotificationGranted by remember { mutableStateOf(PermissionHelper.isFloatingNotificationAllowed(context)) }
     var isBatteryOptimizationIgnored by remember { mutableStateOf(PermissionHelper.isBatteryOptimizationIgnored(context)) }
     var isShizukuReady by remember { mutableStateOf(ShizukuEngine.hasShizukuPermission()) }
     var isLockscreenOpGranted by remember { mutableStateOf(PermissionHelper.isMiuiOpAllowed(context, 10008)) }
@@ -160,6 +161,7 @@ private fun OverviewTabScreen(
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 isPostNotificationGranted = PermissionHelper.isPostNotificationGranted(context)
                 isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
+                isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
                 isBatteryOptimizationIgnored = PermissionHelper.isBatteryOptimizationIgnored(context)
                 isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, 10008)
                 isAutoStartGranted = PermissionHelper.isAutoStartOrLockscreenGranted(context, isAutoStartMarked)
@@ -180,6 +182,7 @@ private fun OverviewTabScreen(
     LaunchedEffect(isAutoStartMarked) {
         isPostNotificationGranted = PermissionHelper.isPostNotificationGranted(context)
         isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
+        isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
         isBatteryOptimizationIgnored = PermissionHelper.isBatteryOptimizationIgnored(context)
         isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, 10008)
         isAutoStartGranted = PermissionHelper.isAutoStartOrLockscreenGranted(context, isAutoStartMarked)
@@ -190,6 +193,7 @@ private fun OverviewTabScreen(
     val grantedCount = listOf(
         isPostNotificationGranted,
         isNotificationAccessGranted,
+        isFloatingNotificationGranted,
         isLockscreenOpGranted || isNotificationAccessGranted,
         isBatteryOptimizationIgnored,
         isAutoStartGranted,
@@ -345,9 +349,11 @@ private fun OverviewTabScreen(
                             ShizukuEngine.requestShizukuPermission()
                         } else {
                             val success = ShizukuEngine.applyOneTouchOptimizations(context)
+                            PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
                             isShizukuReady = true
                             isNotificationAccessGranted = true
                             isPostNotificationGranted = true
+                            isFloatingNotificationGranted = true
                             isBatteryOptimizationIgnored = true
                             isAutoStartGranted = true
                             isLockscreenOpGranted = true
@@ -383,13 +389,13 @@ private fun OverviewTabScreen(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (grantedCount == 6) AppleTeal.copy(alpha = 0.2f) else AppleOrange.copy(alpha = 0.2f))
+                        .background(if (grantedCount == 7) AppleTeal.copy(alpha = 0.2f) else AppleOrange.copy(alpha = 0.2f))
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Text(
-                        text = if (grantedCount == 6) "Hoàn hảo 6/6" else "$grantedCount/6 Đã cấp",
+                        text = if (grantedCount == 7) "Hoàn hảo 7/7" else "$grantedCount/7 Đã cấp",
                         style = Typography.labelSmall.copy(
-                            color = if (grantedCount == 6) AppleTeal else AppleOrange,
+                            color = if (grantedCount == 7) AppleTeal else AppleOrange,
                             fontWeight = FontWeight.Bold
                         )
                     )
@@ -406,6 +412,23 @@ private fun OverviewTabScreen(
                 onActionClick = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !isPostNotificationGranted) {
                         postNotificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        PermissionHelper.openAppNotificationSettings(context)
+                    }
+                }
+            )
+
+            HorizontalDivider(color = GlassBorderSubtle)
+
+            CompactPermissionItem(
+                title = "Thông Báo Nổi (HyperOS Island)",
+                icon = Icons.Default.Fullscreen,
+                isGranted = isFloatingNotificationGranted,
+                onActionClick = {
+                    if (isShizukuReady) {
+                        PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
+                        isFloatingNotificationGranted = true
+                        Toast.makeText(context, "Đã bật Thông Báo Nổi qua Shizuku!", Toast.LENGTH_SHORT).show()
                     } else {
                         PermissionHelper.openAppNotificationSettings(context)
                     }

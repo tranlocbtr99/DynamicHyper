@@ -95,6 +95,13 @@ object PermissionHelper {
                isNotificationAccessGranted(context)
     }
 
+    /**
+     * Kiểm tra quyền Thông báo nổi (Floating Notifications / Heads-up) của Xiaomi HyperOS (Op 10020)
+     */
+    fun isFloatingNotificationAllowed(context: Context): Boolean {
+        return isMiuiOpAllowed(context, 10020)
+    }
+
     // ================= INTENTS =================
 
     fun openNotificationAccessSettings(context: Context) {

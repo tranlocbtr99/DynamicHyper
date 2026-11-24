@@ -56,6 +56,9 @@ object FocusProtocolHelper {
         contentIntent: android.app.PendingIntent? = null,
         actionsMap: Map<String, Any> = emptyMap()
     ): Notification {
+        // Luôn đảm bảo Channel được khởi tạo với IMPORTANCE_HIGH trước khi build
+        setupChannel(context)
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(smallIconRes)
             .setContentTitle(title)
