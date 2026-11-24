@@ -81,8 +81,8 @@ class IdleIslandManager(
                 paramV2.put("timeout", 1440)
                 // enableFloat: Đảo Chờ luôn để false để TUYỆT ĐỐI KHÔNG bung to heads-up banner che màn hình!
                 paramV2.put("enableFloat", false)
-                // isShowNotification: Đặt false để Đảo Chờ xuất hiện quanh nốt ruồi camera nhưng KHÔNG chiếm chỗ trong Trung tâm thông báo
-                paramV2.put("isShowNotification", false)
+                // isShowNotification: Bắt buộc true để HyperOS SystemUI chấp nhận và hiển thị Đảo Chờ trên mọi dòng máy
+                paramV2.put("isShowNotification", true)
                 // islandFirstFloat & reopen: FALSE để KHÔNG bao giờ tự bung to chiếm màn hình
                 paramV2.put("islandFirstFloat", false)
                 paramV2.put("reopen", false)
@@ -217,27 +217,30 @@ class IdleIslandManager(
          * Nền Dark Capsule #E6000000 bo tròn có viền kính mờ để hiển thị sắc nét trên cả Theme Sáng lẫn Theme Tối.
          */
         private fun renderIdleDotBitmap(context: Context, style: String): Bitmap {
-            val bmpWidth = 100
-            val bmpHeight = 72
-            val bmp = Bitmap.createBitmap(bmpWidth, bmpHeight, Bitmap.Config.ARGB_8888)
+            val bmpSize = 96
+            if (style == "minimal") {
+                // Giống HyperBridge: Bitmap trong suốt 96x96 để SystemUI vẽ nốt ruồi tự nhiên chuẩn xác
+                return Bitmap.createBitmap(bmpSize, bmpSize, Bitmap.Config.ARGB_8888)
+            }
+            val bmp = Bitmap.createBitmap(bmpSize, bmpSize, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bmp)
 
             // Vẽ nền viên thuốc Dark Capsule bo tròn tương phản cao
-            val capsuleRect = RectF(2f, 2f, bmpWidth - 2f, bmpHeight - 2f)
+            val capsuleRect = RectF(2f, 10f, bmpSize - 2f, bmpSize - 10f)
             val capsulePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.parseColor("#E6000000") // 90% đen nhung
             }
-            canvas.drawRoundRect(capsuleRect, 32f, 32f, capsulePaint)
+            canvas.drawRoundRect(capsuleRect, 38f, 38f, capsulePaint)
 
             val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 this.style = Paint.Style.STROKE
                 strokeWidth = 2f
                 color = Color.parseColor("#33FFFFFF") // Viền kính mờ tinh tế
             }
-            canvas.drawRoundRect(capsuleRect, 32f, 32f, borderPaint)
+            canvas.drawRoundRect(capsuleRect, 38f, 38f, borderPaint)
 
-            val cx = bmpWidth / 2f
-            val cy = bmpHeight / 2f
+            val cx = bmpSize / 2f
+            val cy = bmpSize / 2f
 
             when (style) {
                 "green_dot" -> {

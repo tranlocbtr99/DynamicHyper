@@ -54,6 +54,7 @@ class DynamicNotificationService : NotificationListenerService() {
     private val activeDynamicIslands = ConcurrentHashMap<String, Int>()
     private val activeDismissJobs = ConcurrentHashMap<String, Job>()
     private val lastNotificationContent = ConcurrentHashMap<String, String>()
+    private val intentionallyRemovedKeys = ConcurrentHashMap<String, Long>()
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -181,6 +182,14 @@ class DynamicNotificationService : NotificationListenerService() {
 
         if (sbn.packageName == "com.miui.screenrecorder") {
             ScreenRecordingIslandManager.hideRecordingIsland(this)
+        }
+
+        // BẢO VỆ ĐẢO KHÔNG BỊ TỰ HỦY:
+        // Nếu thông báo này bị Dynamic Hyper cố tình cancelNotification() để tránh trùng lặp trong trung tâm thông báo,
+        // thì tuyệt đối KHÔNG được hủy đảo trên thanh trạng thái!
+        if (intentionallyRemovedKeys.remove(sbn.key) != null) {
+            Log.d(TAG, "Notification ${sbn.key} was intentionally canceled from shade; keeping Dynamic Island alive!")
+            return
         }
 
         val dynamicIslandId = activeDynamicIslands.remove(sbn.key)
@@ -448,6 +457,7 @@ class DynamicNotificationService : NotificationListenerService() {
             paramV2.put("textButton", textButtonsArray)
         }
 
+        paramV2.put("isShowNotification", true)
         root.put("param_v2", paramV2)
         root.put("isShowNotification", true)
 
@@ -473,9 +483,11 @@ class DynamicNotificationService : NotificationListenerService() {
         // để người dùng không bị thấy 2 thông báo cùng một lúc
         if (isNewMessage) {
             try {
+                intentionallyRemovedKeys[sbn.key] = System.currentTimeMillis()
                 cancelNotification(sbn.key)
                 com.ltm.dynamichyper.core.AppLogger.i("DynamicNotif", "Đã ẩn thông báo gốc của ${sbn.packageName} để tránh trùng lặp trong trung tâm thông báo")
             } catch (e: Exception) {
+                intentionallyRemovedKeys.remove(sbn.key)
                 Log.w("DynamicNotif", "Không thể cancelNotification cho sbn.key: ${e.message}")
             }
         }

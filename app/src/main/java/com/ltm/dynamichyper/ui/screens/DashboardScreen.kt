@@ -139,6 +139,7 @@ private fun OverviewTabScreen(
     var isNotificationAccessGranted by remember { mutableStateOf(PermissionHelper.isNotificationAccessGranted(context)) }
     var isPostNotificationGranted by remember { mutableStateOf(PermissionHelper.isPostNotificationGranted(context)) }
     var isFloatingNotificationGranted by remember { mutableStateOf(PermissionHelper.isFloatingNotificationAllowed(context)) }
+    var isFeaturedNotificationGranted by remember { mutableStateOf(com.ltm.dynamichyper.core.FocusProtocolHelper.canShowFocus(context) != false) }
     var isBatteryOptimizationIgnored by remember { mutableStateOf(PermissionHelper.isBatteryOptimizationIgnored(context)) }
     var isShizukuReady by remember { mutableStateOf(ShizukuEngine.hasShizukuPermission()) }
     var isLockscreenOpGranted by remember { mutableStateOf(PermissionHelper.isMiuiOpAllowed(context, 10008)) }
@@ -162,6 +163,7 @@ private fun OverviewTabScreen(
                 isPostNotificationGranted = PermissionHelper.isPostNotificationGranted(context)
                 isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
                 isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
+                isFeaturedNotificationGranted = com.ltm.dynamichyper.core.FocusProtocolHelper.canShowFocus(context) != false
                 isBatteryOptimizationIgnored = PermissionHelper.isBatteryOptimizationIgnored(context)
                 isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, 10008)
                 isAutoStartGranted = PermissionHelper.isAutoStartOrLockscreenGranted(context, isAutoStartMarked)
@@ -184,6 +186,7 @@ private fun OverviewTabScreen(
         isPostNotificationGranted = PermissionHelper.isPostNotificationGranted(context)
         isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
         isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
+        isFeaturedNotificationGranted = com.ltm.dynamichyper.core.FocusProtocolHelper.canShowFocus(context) != false
         isBatteryOptimizationIgnored = PermissionHelper.isBatteryOptimizationIgnored(context)
         isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, 10008)
         isAutoStartGranted = PermissionHelper.isAutoStartOrLockscreenGranted(context, isAutoStartMarked)
@@ -195,6 +198,7 @@ private fun OverviewTabScreen(
         isPostNotificationGranted,
         isNotificationAccessGranted,
         isFloatingNotificationGranted,
+        isFeaturedNotificationGranted,
         isLockscreenOpGranted,
         isBatteryOptimizationIgnored,
         isAutoStartGranted,
@@ -297,7 +301,7 @@ private fun OverviewTabScreen(
                             style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = AppleBlue)
                         )
                         Text(
-                            text = "v2.0.0-beta",
+                            text = "v2.0.1-beta",
                             style = Typography.bodySmall.copy(fontSize = 10.sp, color = TextSecondary)
                         )
                     }
@@ -330,7 +334,7 @@ private fun OverviewTabScreen(
         }
 
         // Cảnh báo & Nút Cấp Quyền Nhanh khi thiếu quyền Thông Báo hoặc Thông Báo Nổi
-        if (!isPostNotificationGranted || !isNotificationAccessGranted || !isFloatingNotificationGranted) {
+        if (!isPostNotificationGranted || !isNotificationAccessGranted || !isFloatingNotificationGranted || !isFeaturedNotificationGranted) {
             LiquidGlassCard(
                 hazeState = hazeState,
                 modifier = Modifier
@@ -360,6 +364,7 @@ private fun OverviewTabScreen(
                         Text(
                             text = when {
                                 !isPostNotificationGranted -> "Chưa Cấp Quyền Thông Báo"
+                                !isFeaturedNotificationGranted -> "Chưa Bật Thông Báo Tiêu Điểm"
                                 !isFloatingNotificationGranted -> "Chưa Bật Thông Báo Nổi (HyperOS)"
                                 else -> "Chưa Bật Truy Cập Thông Báo"
                             },
@@ -368,6 +373,7 @@ private fun OverviewTabScreen(
                         Text(
                             text = when {
                                 !isPostNotificationGranted -> "Bắt buộc cấp quyền để Dynamic Hyper hiển thị thông báo."
+                                !isFeaturedNotificationGranted -> "HyperOS cần bạn BẬT 'Thông báo nổi bật' trong Cài đặt thông báo để Đảo hiển thị!"
                                 !isFloatingNotificationGranted -> "Cần bật 'Thông báo nổi' để HyperOS cho phép gắn Đảo lên nốt ruồi camera!"
                                 else -> "Cần cấp quyền để ứng dụng đọc tin nhắn và đưa lên Đảo Động."
                             },
@@ -387,6 +393,9 @@ private fun OverviewTabScreen(
                                         } else {
                                             PermissionHelper.openAppNotificationSettings(context)
                                         }
+                                    }
+                                    !isFeaturedNotificationGranted -> {
+                                        PermissionHelper.openAppNotificationSettings(context)
                                     }
                                     !isFloatingNotificationGranted -> {
                                         if (isShizukuReady) {
@@ -532,6 +541,17 @@ private fun OverviewTabScreen(
                     } else {
                         PermissionHelper.openAppNotificationSettings(context)
                     }
+                }
+            )
+
+            HorizontalDivider(color = GlassBorderSubtle)
+
+            CompactPermissionItem(
+                title = "Thông Báo Tiêu Điểm (Featured Notifications)",
+                icon = Icons.Default.Star,
+                isGranted = isFeaturedNotificationGranted,
+                onActionClick = {
+                    PermissionHelper.openAppNotificationSettings(context)
                 }
             )
 
