@@ -97,25 +97,55 @@ object ShizukuEngine {
             }
         }
 
-        applyXmsfBypass()
+        applyXmsfBypass(context)
         return allSuccess
     }
 
     /**
-     * Chặn mạng com.xiaomi.xmsf qua chuẩn Connectivity Chain 3 để HyperOS cho phép Focus Island.
-     * Chỉ chạy bước 2 khi ROM thực sự hỗ trợ chain3, tránh tự tắt mạng XMSF trên ROM không hỗ trợ.
+     * Chặn mạng com.xiaomi.xmsf qua ShizukuHook (chuẩn HyperBridge IPC) để HyperOS AuthManager bỏ qua kiểm duyệt online.
      */
-    fun applyXmsfBypass(): Boolean {
-        val (c1, out1) = execCommand("cmd connectivity set-chain3-enabled true")
-        if (c1 != 0) {
-            AppLogger.i(TAG, "Bỏ qua XMSF bypass: ROM không hỗ trợ chain3 (exit=$c1 ${out1.take(80)})")
-            return false
+    fun applyXmsfBypass(context: Context): Boolean {
+        try {
+            val pm = context.packageManager
+            val xmsfUid = try {
+                pm.getPackageUid("com.xiaomi.xmsf", 0)
+            } catch (e: Exception) {
+                AppLogger.w(TAG, "Không tìm thấy com.xiaomi.xmsf trên máy này: ${e.message}")
+                return false
+            }
+
+            // 1. Thử qua Hook IPC ShizukuBinderWrapper trực tiếp (Chuẩn HyperBridge)
+            val hookSuccess = try {
+                ShizukuHook.setPackageNetworkingEnabled(xmsfUid, false)
+            } catch (e: Throwable) {
+                AppLogger.w(TAG, "ShizukuHook IPC thất bại, thử lệnh shell fallback: ${e.message}")
+                false
+            }
+
+            if (hookSuccess) {
+                AppLogger.i(TAG, "✓ Đã áp dụng XMSF Bypass qua ShizukuHook IPC thành công (uid=$xmsfUid)")
+                return true
+            }
+
+            // 2. Fallback sang lệnh netpolicy / connectivity
+            val (cNet, outNet) = execCommand("cmd netpolicy add restrict-background-blacklist $xmsfUid")
+            if (cNet == 0) {
+                AppLogger.i(TAG, "✓ Đã áp dụng XMSF Bypass qua cmd netpolicy blacklist (uid=$xmsfUid)")
+                return true
+            }
+
+            val (c1, out1) = execCommand("cmd connectivity set-chain3-enabled true")
+            if (c1 == 0) {
+                val (c2, out2) = execCommand("cmd connectivity set-package-networking-enabled false com.xiaomi.xmsf")
+                if (c2 == 0) {
+                    AppLogger.i(TAG, "✓ Đã áp dụng XMSF Bypass qua cmd connectivity chain3")
+                    return true
+                }
+            }
+        } catch (e: Throwable) {
+            AppLogger.e(TAG, "Lỗi khi chạy applyXmsfBypass: ${e.message}", e)
         }
-        val (c2, out2) = execCommand("cmd connectivity set-package-networking-enabled false com.xiaomi.xmsf")
-        val success = c2 == 0
-        Log.i(TAG, "Applied HyperOS XMSF Bypass via Connectivity chain3: $success")
-        AppLogger.i(TAG, "XMSF bypass chain3=OK, block xmsf=$success ${if (success) "" else out2.take(80)}")
-        return success
+        return false
     }
 
     /**

@@ -76,12 +76,12 @@ class IdleIslandManager(
                 paramV2.put("updatable", true)
                 paramV2.put("ticker", "Dynamic Hyper")
                 paramV2.put("timeout", 1440)
-                // enableFloat: BẮT BUỘC TRUE ĐỂ HYPEROS ATTACH ĐẢO VÀO CAMERA NOTCH!
+                // enableFloat: Giữ true để HyperOS SystemUI định vị lên thanh trạng thái quanh camera
                 paramV2.put("enableFloat", true)
                 paramV2.put("isShowNotification", true)
-                // islandFirstFloat: BẮT BUỘC TRUE ĐỂ HYPEROS SYSTEMUI KHỞI TẠO NEO VỊ TRÍ NỔI BAN ĐẦU!
-                paramV2.put("islandFirstFloat", true)
-                paramV2.put("reopen", true)
+                // islandFirstFloat & reopen: FALSE để KHÔNG bao giờ tự bung to chiếm màn hình
+                paramV2.put("islandFirstFloat", false)
+                paramV2.put("reopen", false)
 
                 val paramIsland = org.json.JSONObject()
                 paramIsland.put("islandProperty", 1)
@@ -91,7 +91,7 @@ class IdleIslandManager(
                 paramIsland.put("dismissIsland", false)
                 paramIsland.put("maxSize", false)
                 paramIsland.put("needCloseAnimation", false)
-                paramIsland.put("expandedTime", 2)
+                paramIsland.put("expandedTime", 0) // 0 giây: Đảo Chờ luôn ở trạng thái viên thuốc gọn gàng, không bung to
 
                 // Tính toán nội dung tiêu đề và màu sắc
                 val weather = WeatherManager.currentData
@@ -188,7 +188,7 @@ class IdleIslandManager(
                     jsonParam = root.toString(),
                     pics = pics,
                     isOngoing = true,
-                    onlyAlertOnce = false,
+                    onlyAlertOnce = true,
                     priority = androidx.core.app.NotificationCompat.PRIORITY_HIGH,
                     contentIntent = contentIntent
                 )

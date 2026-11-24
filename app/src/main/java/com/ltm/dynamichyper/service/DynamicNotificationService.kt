@@ -53,6 +53,7 @@ class DynamicNotificationService : NotificationListenerService() {
 
     private val activeDynamicIslands = ConcurrentHashMap<String, Int>()
     private val activeDismissJobs = ConcurrentHashMap<String, Job>()
+    private val lastNotificationContent = ConcurrentHashMap<String, String>()
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -183,6 +184,7 @@ class DynamicNotificationService : NotificationListenerService() {
         }
 
         val dynamicIslandId = activeDynamicIslands.remove(sbn.key)
+        lastNotificationContent.remove(sbn.key)
         if (dynamicIslandId != null) {
             activeDismissJobs.remove(sbn.key)?.cancel()
             try {
@@ -233,6 +235,16 @@ class DynamicNotificationService : NotificationListenerService() {
             Log.d(TAG, "Notification from ${sbn.packageName} ignored by user per-app setting")
             return
         }
+
+        // Chống spam bung đảo liên tục: Kiểm tra nếu tiêu đề & nội dung không đổi
+        val contentKey = "$title|$text"
+        val isSameContent = (lastNotificationContent[sbn.key] == contentKey)
+        if (isSameContent && isMedia) {
+            // Media progress cập nhật từng giây -> bỏ qua không bung lại
+            return
+        }
+        val isNewMessage = isMessaging && !isSameContent
+        lastNotificationContent[sbn.key] = contentKey
 
         val dynamicIslandId = sbn.key.hashCode()
         activeDynamicIslands[sbn.key] = dynamicIslandId
@@ -315,8 +327,9 @@ class DynamicNotificationService : NotificationListenerService() {
         paramV2.put("timeout", 1440)
         paramV2.put("enableFloat", true)
         paramV2.put("isShowNotification", true)
-        paramV2.put("islandFirstFloat", true)
-        paramV2.put("reopen", true)
+        // islandFirstFloat: chỉ bung to khi là tin nhắn mới, media/update tuyệt đối không bung
+        paramV2.put("islandFirstFloat", isNewMessage)
+        paramV2.put("reopen", false) // KHÔNG BAO GIỜ REOPEN LIÊN TỤC
 
         val paramIsland = JSONObject()
         paramIsland.put("islandProperty", 1)
@@ -326,8 +339,8 @@ class DynamicNotificationService : NotificationListenerService() {
         paramIsland.put("dismissIsland", false)
         paramIsland.put("maxSize", false)
         paramIsland.put("needCloseAnimation", true)
-        // Khi tin nhắn mới đến: expandedTime = 4s (tự động bung to 4 giây cho người dùng xem rồi tự thu lại về camera)
-        paramIsland.put("expandedTime", if (isMedia) 0 else 4)
+        // Khi tin nhắn mới đến: bung 3 giây cho người dùng xem rồi tự thu lại về camera
+        paramIsland.put("expandedTime", if (isNewMessage) 3 else 0)
         paramIsland.put("highlightColor", highlightColor)
 
         // bigIslandArea: Left chứa Avatar, Right chứa Tiêu đề & Nội dung tin nhắn
@@ -448,8 +461,8 @@ class DynamicNotificationService : NotificationListenerService() {
             jsonParam = jsonParam,
             pics = pics,
             isOngoing = isMedia,
-            // Cho tin nhắn mới: onlyAlertOnce = false để kích hoạt Heads-up Float và bung to Dynamic Island
-            onlyAlertOnce = isMedia,
+            // Chỉ alert/bung ra khi là tin nhắn mới nhận diện lần đầu; các bản cập nhật sau chỉ cập nhật âm thầm
+            onlyAlertOnce = !isNewMessage,
             contentIntent = notif.contentIntent,
             actionsMap = actionsMap
         )
