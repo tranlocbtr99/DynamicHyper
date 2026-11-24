@@ -86,14 +86,33 @@ object AppLogger {
 
     fun getAllLogsAsText(context: Context): String {
         val sb = StringBuilder()
+        val pkgInfo = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(context.packageName, 0)
+            }
+        } catch (_: Exception) {
+            null
+        }
+        val vName = pkgInfo?.versionName ?: "Unknown"
+        val vCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            pkgInfo?.longVersionCode ?: 0
+        } else {
+            @Suppress("DEPRECATION")
+            pkgInfo?.versionCode ?: 0
+        }
+
         sb.append("=== DYNAMIC HYPER BETA DIAGNOSTIC LOG ===\n")
-        sb.append("App Version: 1.5.4-beta (Build 29)\n")
+        sb.append("App Version: $vName (Build $vCode)\n")
         sb.append("Device: ${Build.MANUFACTURER} ${Build.MODEL} (${Build.DEVICE})\n")
         sb.append("OS: Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})\n")
         sb.append("Brand/Fingerprint: ${Build.FINGERPRINT}\n")
         sb.append("Notification Access: ${PermissionHelper.isNotificationAccessGranted(context)}\n")
-        sb.append("Floating Notif (10020): ${PermissionHelper.isFloatingNotificationAllowed(context)}\n")
-        sb.append("Lockscreen Op (10008): ${PermissionHelper.isMiuiOpAllowed(context, 10008)}\n")
+        sb.append("Floating Notif (10033): ${PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_FLOAT_NOTIFICATION)}\n")
+        sb.append("Bg Popup (10020): ${PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_BG_START)}\n")
+        sb.append("Lockscreen Op (10008): ${PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_SHOW_WHEN_LOCKED)}\n")
         sb.append("Battery Optimization Ignored: ${PermissionHelper.isBatteryOptimizationIgnored(context)}\n")
         sb.append("Shizuku Available: ${ShizukuEngine.isShizukuAvailable()} (Granted: ${ShizukuEngine.hasShizukuPermission()})\n")
         sb.append("=========================================\n\n")

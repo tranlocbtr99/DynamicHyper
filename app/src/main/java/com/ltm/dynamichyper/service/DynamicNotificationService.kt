@@ -455,6 +455,7 @@ class DynamicNotificationService : NotificationListenerService() {
         )
 
         NotificationManagerCompat.from(this).notify(dynamicIslandId, notification)
+        com.ltm.dynamichyper.core.AppLogger.i(TAG, "Đã gửi thông báo Focus cho ${sbn.packageName} (id=$dynamicIslandId, isMedia=$isMedia)")
 
         val isPersistent = prefs.isPersistentNotificationIsland.first()
         if (!isMedia && !isPersistent) {

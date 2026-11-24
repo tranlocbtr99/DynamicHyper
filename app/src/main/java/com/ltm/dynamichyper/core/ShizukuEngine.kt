@@ -82,6 +82,7 @@ object ShizukuEngine {
             "cmd appops set $packageName 10008 allow",
             "cmd appops set $packageName 10020 allow",
             "cmd appops set $packageName 10021 allow",
+            "cmd appops set $packageName 10033 allow",
             "cmd appops set $packageName SYSTEM_ALERT_WINDOW allow",
             "pm grant $packageName android.permission.POST_NOTIFICATIONS"
         )

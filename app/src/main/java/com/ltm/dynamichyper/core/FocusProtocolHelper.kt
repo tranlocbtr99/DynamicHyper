@@ -30,6 +30,8 @@ object FocusProtocolHelper {
             setSound(null, null)
             enableVibration(false)
             setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+            setBypassDnd(true)
             description = "Notification channel powering Xiaomi HyperOS Focus Islands"
         }
         manager.createNotificationChannel(channel)
@@ -66,7 +68,6 @@ object FocusProtocolHelper {
             .setPriority(priority)
             .setOngoing(isOngoing)
             .setOnlyAlertOnce(onlyAlertOnce)
-            .setSilent(true)
 
         if (contentIntent != null) {
             builder.setContentIntent(contentIntent)

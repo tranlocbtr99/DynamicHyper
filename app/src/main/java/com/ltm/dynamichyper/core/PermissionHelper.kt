@@ -62,9 +62,14 @@ object PermissionHelper {
         }
     }
 
+    const val OP_MIUI_SHOW_WHEN_LOCKED = 10008
+    const val OP_MIUI_BG_START = 10020
+    const val OP_MIUI_POPUP_WINDOW = 10021
+    const val OP_MIUI_FLOAT_NOTIFICATION = 10033
+
     /**
      * Kiểm tra trạng thái cấp quyền chuyên sâu cho các mã Op MIUI/HyperOS qua Reflection
-     * Ví dụ: 10008 (Show on Lockscreen), 10020 (Background Popups), 10021 (Popup Window)
+     * Ví dụ: 10008 (Show on Lockscreen), 10020 (Background Popups), 10021 (Popup Window), 10033 (Floating Notification)
      */
     fun isMiuiOpAllowed(context: Context, opCode: Int): Boolean {
         return try {
@@ -89,17 +94,18 @@ object PermissionHelper {
         if (isManuallyMarked) return true
         // Trên Xiaomi HyperOS, khi người dùng cấp quyền Tự khởi chạy hoặc Quyền khác,
         // các mã op 10008, 10020, 10021 sẽ được set sang MODE_ALLOWED (0)
-        return isMiuiOpAllowed(context, 10008) ||
-               isMiuiOpAllowed(context, 10020) ||
-               isMiuiOpAllowed(context, 10021) ||
+        return isMiuiOpAllowed(context, OP_MIUI_SHOW_WHEN_LOCKED) ||
+               isMiuiOpAllowed(context, OP_MIUI_BG_START) ||
+               isMiuiOpAllowed(context, OP_MIUI_POPUP_WINDOW) ||
                isNotificationAccessGranted(context)
     }
 
     /**
-     * Kiểm tra quyền Thông báo nổi (Floating Notifications / Heads-up) của Xiaomi HyperOS (Op 10020)
+     * Kiểm tra quyền Thông báo nổi (Floating Notifications / Heads-up) của Xiaomi HyperOS
+     * Trên HyperOS (Android 17), công tắc Thông báo nổi chuẩn là mã Op 10033 (kết hợp 10020 làm fallback)
      */
     fun isFloatingNotificationAllowed(context: Context): Boolean {
-        return isMiuiOpAllowed(context, 10020)
+        return isMiuiOpAllowed(context, OP_MIUI_FLOAT_NOTIFICATION) || isMiuiOpAllowed(context, OP_MIUI_BG_START)
     }
 
     // ================= INTENTS =================
@@ -164,13 +170,16 @@ object PermissionHelper {
 
     /**
      * Tắt hoặc Bật thông báo nổi (Floating notification / Heads-up) của app qua Shizuku
+     * Cấp đồng bộ cả Op 10033 (công tắc chính trong cài đặt thông báo HyperOS) và Op 10020
      */
     fun setMiuiFloatingNotificationEnabled(packageName: String, enabled: Boolean): Boolean {
         if (!ShizukuEngine.hasShizukuPermission()) return false
         val mode = if (enabled) "allow" else "ignore"
-        val cmd = "cmd appops set $packageName 10020 $mode"
-        val (exitCode, _) = ShizukuEngine.execCommand(cmd)
-        return exitCode == 0
+        val cmd1 = "cmd appops set $packageName 10033 $mode"
+        val cmd2 = "cmd appops set $packageName 10020 $mode"
+        val (exit1, _) = ShizukuEngine.execCommand(cmd1)
+        val (exit2, _) = ShizukuEngine.execCommand(cmd2)
+        return exit1 == 0 && exit2 == 0
     }
 
     /**
