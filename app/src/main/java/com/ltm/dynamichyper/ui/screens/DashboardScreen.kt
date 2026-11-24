@@ -215,17 +215,17 @@ private fun OverviewTabScreen(
 
         // Hàng tinh gọn OTA & Ủng Hộ Tác Giả (Compact Dual-Bubble Row)
         CompactOtaAndDonateRow(
-            currentVersion = "v1.5.2",
+            currentVersion = "v1.5.3",
             isCheckingUpdate = isCheckingUpdate,
             onCheckUpdateClick = {
                 scope.launch {
                     isCheckingUpdate = true
-                    val update = OtaUpdateManager.checkUpdate()
+                    val update = OtaUpdateManager.checkUpdate(context)
                     isCheckingUpdate = false
                     if (update != null && update.hasUpdate) {
                         updateInfoState = update
                     } else {
-                        Toast.makeText(context, "Bạn đang dùng phiên bản mới nhất (v1.5.2)!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Bạn đang dùng phiên bản mới nhất (${OtaUpdateManager.getCurrentVersion(context)})!", Toast.LENGTH_SHORT).show()
                     }
                 }
             },
@@ -766,12 +766,21 @@ private fun OverviewTabScreen(
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    updateInfoState = null
-                    OtaUpdateManager.startDownloadAndInstall(context, update.downloadUrl)
-                    Toast.makeText(context, "Đang tải bản cập nhật...", Toast.LENGTH_SHORT).show()
-                }) {
-                    Text("Tải Về & Cài Đặt", color = AppleBlue, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = {
+                        updateInfoState = null
+                        OtaUpdateManager.openInBrowser(context, update.downloadUrl)
+                    }) {
+                        Text("Trình Duyệt ↗", color = AppleTeal)
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    TextButton(onClick = {
+                        updateInfoState = null
+                        OtaUpdateManager.startDownloadAndInstall(context, update.downloadUrl)
+                        Toast.makeText(context, "Đang tải bản cập nhật...", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Text("Cập Nhật Ngay", color = AppleBlue, fontWeight = FontWeight.Bold)
+                    }
                 }
             },
             dismissButton = {

@@ -10,10 +10,10 @@ android {
 
     defaultConfig {
         applicationId = "com.ltm.dynamichyper"
-        minSdk = 34
+        minSdk = 33
         targetSdk = 37
-        versionCode = 27
-        versionName = "1.5.2"
+        versionCode = 28
+        versionName = "1.5.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -1,19 +1,22 @@
 package com.ltm.dynamichyper.core
 
-import android.app.DownloadManager
-import android.content.BroadcastReceiver
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
+import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import com.google.gson.JsonParser
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
@@ -29,9 +32,19 @@ data class UpdateInfo(
 object OtaUpdateManager {
     private const val TAG = "DynamicHyper:OTA"
     private const val GITHUB_REPO = "tranlocbtr99/DynamicHyper"
-    private const val CURRENT_VERSION = "1.5.1"
+    private const val CHANNEL_ID = "ota_update_channel"
+    private const val NOTIFICATION_ID = 2026
 
-    suspend fun checkUpdate(): UpdateInfo? = withContext(Dispatchers.IO) {
+    fun getCurrentVersion(context: Context): String {
+        return try {
+            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            pInfo.versionName ?: "1.5.3"
+        } catch (_: Exception) {
+            "1.5.3"
+        }
+    }
+
+    suspend fun checkUpdate(context: Context? = null): UpdateInfo? = withContext(Dispatchers.IO) {
         try {
             val apiUrl = "https://api.github.com/repos/$GITHUB_REPO/releases/latest"
             val connection = (URL(apiUrl).openConnection() as HttpURLConnection).apply {
@@ -61,7 +74,8 @@ object OtaUpdateManager {
                     }
                 }
 
-                val hasNewer = isNewerVersion(CURRENT_VERSION, tagName)
+                val curVer = if (context != null) getCurrentVersion(context) else "1.5.3"
+                val hasNewer = isNewerVersion(curVer, tagName)
                 UpdateInfo(
                     hasUpdate = hasNewer,
                     latestVersion = tagName,
@@ -92,53 +106,219 @@ object OtaUpdateManager {
         return false
     }
 
-    fun startDownloadAndInstall(context: Context, downloadUrl: String) {
+    /**
+     * Mở trình duyệt ngoài để người dùng tải APK trực tiếp làm phương án dự phòng
+     */
+    fun openInBrowser(context: Context, downloadUrl: String) {
         try {
-            val uri = Uri.parse(downloadUrl)
-            val request = DownloadManager.Request(uri).apply {
-                setTitle("Dynamic Hyper Cập Nhật")
-                setDescription("Đang tải bản cập nhật mới nhất...")
-                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, "DynamicHyper-Update.apk")
-                setMimeType("application/vnd.android.package-archive")
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Cannot open browser: ${e.message}")
+            Toast.makeText(context, "Không thể mở trình duyệt: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Tải tệp APK trực tiếp qua Coroutine an toàn trong thư mục app-specific
+     * Tránh hoàn toàn lỗi Scoped Storage EACCES (Permission Denied) và lỗi parse package
+     */
+    fun startDownloadAndInstall(context: Context, downloadUrl: String) {
+        val appContext = context.applicationContext
+
+        CoroutineScope(Dispatchers.IO).launch {
+            val notifManager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    CHANNEL_ID,
+                    "Dynamic Hyper Cập Nhật",
+                    NotificationManager.IMPORTANCE_LOW
+                )
+                notifManager.createNotificationChannel(channel)
             }
 
-            val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            val downloadId = manager.enqueue(request)
+            val notifBuilder = NotificationCompat.Builder(appContext, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle("Dynamic Hyper Đang Tải Cập Nhật")
+                .setContentText("Đang kết nối máy chủ...")
+                .setProgress(100, 0, true)
+                .setOngoing(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
 
-            val onComplete = object : BroadcastReceiver() {
-                override fun onReceive(ctxt: Context?, intent: Intent?) {
-                    val id = intent?.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
-                    if (id == downloadId) {
-                        try {
-                            context.unregisterReceiver(this)
-                        } catch (_: Exception) {}
+            try {
+                notifManager.notify(NOTIFICATION_ID, notifBuilder.build())
+            } catch (_: Exception) {}
 
-                        val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "DynamicHyper-Update.apk")
-                        if (file.exists()) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
-                                Toast.makeText(context, "Vui lòng cấp quyền 'Cài đặt ứng dụng không rõ nguồn' cho Dynamic Hyper để cập nhật!", Toast.LENGTH_LONG).show()
-                                val permissionIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
-                                    data = Uri.parse("package:${context.packageName}")
-                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                }
-                                context.startActivity(permissionIntent)
-                                return
-                            }
-                            val contentUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(contentUri, "application/vnd.android.package-archive")
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            }
-                            context.startActivity(installIntent)
+            try {
+                // Theo dõi HTTP Redirect (GitHub Releases luôn redirect 302 sang AWS S3 / objects.githubusercontent)
+                var currentUrl = downloadUrl
+                var connection: HttpURLConnection
+                var redirectCount = 0
+
+                while (true) {
+                    val url = URL(currentUrl)
+                    connection = (url.openConnection() as HttpURLConnection).apply {
+                        instanceFollowRedirects = true
+                        setRequestProperty("User-Agent", "DynamicHyper-App")
+                        connectTimeout = 15000
+                        readTimeout = 30000
+                    }
+
+                    val code = connection.responseCode
+                    if (code == HttpURLConnection.HTTP_MOVED_TEMP ||
+                        code == HttpURLConnection.HTTP_MOVED_PERM ||
+                        code == HttpURLConnection.HTTP_SEE_OTHER ||
+                        code == 307 || code == 308
+                    ) {
+                        val location = connection.getHeaderField("Location")
+                        connection.disconnect()
+                        if (location != null && redirectCount < 5) {
+                            currentUrl = location
+                            redirectCount++
+                            continue
                         }
                     }
+                    break
+                }
+
+                if (connection.responseCode != HttpURLConnection.HTTP_OK) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(appContext, "Không thể tải bản cập nhật (Mã lỗi ${connection.responseCode}). Đang mở trình duyệt...", Toast.LENGTH_LONG).show()
+                        openInBrowser(appContext, downloadUrl)
+                    }
+                    notifManager.cancel(NOTIFICATION_ID)
+                    return@launch
+                }
+
+                // Dùng thư mục app-specific ngoài (không bị giới hạn Scoped Storage EACCES trên Android 11+)
+                val storageDir = appContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: appContext.cacheDir
+                if (!storageDir.exists()) storageDir.mkdirs()
+
+                val apkFile = File(storageDir, "DynamicHyper-Update.apk")
+                if (apkFile.exists()) {
+                    apkFile.delete()
+                }
+
+                val contentLength = connection.contentLength
+                var totalBytesRead = 0L
+                var lastProgress = 0
+
+                connection.inputStream.use { input ->
+                    apkFile.outputStream().use { output ->
+                        val buffer = ByteArray(16 * 1024)
+                        var bytesRead: Int
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            totalBytesRead += bytesRead
+                            if (contentLength > 0) {
+                                val progress = ((totalBytesRead * 100) / contentLength).toInt()
+                                if (progress >= lastProgress + 5) {
+                                    lastProgress = progress
+                                    notifBuilder.setProgress(100, progress, false)
+                                        .setContentText("Đã tải $progress%")
+                                    try {
+                                        notifManager.notify(NOTIFICATION_ID, notifBuilder.build())
+                                    } catch (_: Exception) {}
+                                }
+                            }
+                        }
+                        output.flush()
+                    }
+                }
+
+                notifManager.cancel(NOTIFICATION_ID)
+
+                // Kiểm tra kích thước và tính toàn vẹn của tệp APK
+                if (!apkFile.exists() || apkFile.length() < 1_000_000) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(appContext, "Tệp tải về chưa hoàn tất. Đang chuyển sang trình duyệt...", Toast.LENGTH_LONG).show()
+                        openInBrowser(appContext, downloadUrl)
+                    }
+                    return@launch
+                }
+
+                // Kiểm tra giải mã tệp APK bằng Android PackageManager để tránh lỗi "There was a problem parsing the package"
+                val archiveInfo = appContext.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+                if (archiveInfo == null) {
+                    Log.e(TAG, "Corrupted APK file downloaded")
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(appContext, "Tệp APK bị hỏng hoặc không tương thích. Đang mở trình duyệt tải trực tiếp...", Toast.LENGTH_LONG).show()
+                        openInBrowser(appContext, downloadUrl)
+                    }
+                    return@launch
+                }
+
+                // Tiến hành cài đặt
+                withContext(Dispatchers.Main) {
+                    installApk(appContext, apkFile)
+                }
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in OTA download", e)
+                notifManager.cancel(NOTIFICATION_ID)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(appContext, "Lỗi tải cập nhật: ${e.message}. Đang mở trình duyệt...", Toast.LENGTH_LONG).show()
+                    openInBrowser(appContext, downloadUrl)
                 }
             }
-            context.registerReceiver(onComplete, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED)
+        }
+    }
+
+    /**
+     * Khởi chạy Intent cài đặt hoặc dùng Shizuku nếu đã cấp quyền
+     */
+    fun installApk(context: Context, apkFile: File) {
+        try {
+            // 1. Thử cài đặt trực tiếp qua Shizuku nếu đang kích hoạt (không cần bấm xác nhận)
+            if (ShizukuEngine.isShizukuAvailable() && ShizukuEngine.hasShizukuPermission()) {
+                val (exitCode, output) = ShizukuEngine.execCommand("pm install -r \"${apkFile.absolutePath}\"")
+                if (exitCode == 0) {
+                    Toast.makeText(context, "Đã cập nhật thành công qua Shizuku!", Toast.LENGTH_SHORT).show()
+                    return
+                } else {
+                    Log.w(TAG, "Shizuku install failed: $output, falling back to standard installer")
+                }
+            }
+
+            // 2. Kiểm tra quyền 'Cài đặt ứng dụng không rõ nguồn' trên Android 8+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+                Toast.makeText(context, "Vui lòng cho phép 'Cài đặt ứng dụng không rõ nguồn' cho Dynamic Hyper để cập nhật!", Toast.LENGTH_LONG).show()
+                val permIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(permIntent)
+                return
+            }
+
+            // 3. Sử dụng FileProvider an toàn
+            val contentUri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                apkFile
+            )
+
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(contentUri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            }
+
+            // Cấp quyền đọc rõ ràng cho toàn bộ package installer của Xiaomi/Google
+            val resolveInfos = context.packageManager.queryIntentActivities(installIntent, PackageManager.MATCH_DEFAULT_ONLY)
+            for (info in resolveInfos) {
+                context.grantUriPermission(info.activityInfo.packageName, contentUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            context.startActivity(installIntent)
+
         } catch (e: Exception) {
-            Log.e(TAG, "Error starting download: ${e.message}")
+            Log.e(TAG, "Cannot launch installer", e)
+            Toast.makeText(context, "Không thể mở trình cài đặt: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 }
-
