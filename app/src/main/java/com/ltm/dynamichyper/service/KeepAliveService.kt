@@ -1,9 +1,12 @@
 package com.ltm.dynamichyper.service
 
 import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -34,7 +37,25 @@ class KeepAliveService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "onCreate")
+        createKeepAliveChannel()
         AppLogger.d(TAG, "KeepAliveService khởi tạo")
+    }
+
+    private fun createKeepAliveChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channel = NotificationChannel(
+                KEEP_ALIVE_CHANNEL_ID,
+                "Dynamic Hyper Dịch Vụ Nền",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
+                description = "Duy trì kết nối nền cho Đảo Động"
+            }
+            manager.createNotificationChannel(channel)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -66,15 +87,21 @@ class KeepAliveService : Service() {
     private fun startForegroundCompat() {
         if (foregroundStarted) return
         foregroundStarted = true
+        createKeepAliveChannel()
         val notification = buildNotification()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIFICATION_ID, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Throwable) {
+            AppLogger.e(TAG, "Lỗi khi gọi startForeground trong KeepAliveService: ${e.message}", e)
         }
     }
 
     private fun buildNotification(): Notification {
+        createKeepAliveChannel()
         val contentIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java).apply {
@@ -82,7 +109,7 @@ class KeepAliveService : Service() {
             },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        return NotificationCompat.Builder(this, FocusProtocolHelper.CHANNEL_ID)
+        return NotificationCompat.Builder(this, KEEP_ALIVE_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Dynamic Hyper – Đảo Chờ")
             .setContentText("Đang giữ kết nối thông báo nền cho Đảo Chờ")
@@ -117,5 +144,6 @@ class KeepAliveService : Service() {
 
     companion object {
         const val ACTION_STOP = "com.ltm.dynamichyper.action.STOP_KEEP_ALIVE"
+        const val KEEP_ALIVE_CHANNEL_ID = "dynamic_hyper_keep_alive_channel"
     }
 }

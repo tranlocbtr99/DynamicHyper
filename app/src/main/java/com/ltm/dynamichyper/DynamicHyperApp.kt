@@ -6,6 +6,7 @@ import android.content.Intent
 import android.os.Build
 import android.util.Log
 import com.ltm.dynamichyper.core.AppLogger
+import com.ltm.dynamichyper.core.FocusProtocolHelper
 import com.ltm.dynamichyper.service.KeepAliveService
 
 class DynamicHyperApp : Application() {
@@ -14,7 +15,14 @@ class DynamicHyperApp : Application() {
         super.onCreate()
         instance = this
         Log.i(TAG, "DynamicHyperApp initialized successfully")
-        AppLogger.i(TAG, "DynamicHyperApp khởi động phiên bản v2.0.6-beta thành công")
+        AppLogger.i(TAG, "DynamicHyperApp khởi động phiên bản v2.0.7-beta thành công")
+
+        // Khởi tạo kênh thông báo hệ thống an toàn ngay từ Application
+        try {
+            FocusProtocolHelper.setupChannel(this)
+        } catch (e: Throwable) {
+            Log.e(TAG, "setupChannel failed: ${e.message}")
+        }
 
         // Chú ý Android 12+: Tuyệt đối không gọi startForegroundService trong Application.onCreate()
         // vì sẽ gây ra ForegroundServiceStartNotAllowedException và khiến app bị crash/buộc dừng khi mở lần đầu.
