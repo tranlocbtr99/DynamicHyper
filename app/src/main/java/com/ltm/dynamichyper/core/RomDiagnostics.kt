@@ -55,9 +55,11 @@ object RomDiagnostics {
 
     /** Đường gửi mà app sẽ dùng với cấu hình hiện tại. */
     fun predictedPath(context: Context): String = when {
-        ShizukuEngine.hasShizukuPermission() && isXmsfInstalled(context) -> "cách ly XMSF qua Shizuku"
-        ShizukuEngine.hasShizukuPermission() -> "trực tiếp (máy không có XMSF)"
-        else -> "trực tiếp (không có Shizuku)"
+        !isXmsfInstalled(context) -> "trực tiếp (máy không có XMSF)"
+        ShizukuEngine.hasShizukuPermission() -> "khóa XMSF vĩnh viễn (Shizuku đang bật)"
+        ShizukuEngine.isIsolatedInCurrentBoot(context) -> "chế độ độc lập (XMSF đã khóa trong phiên boot này, Shizuku tắt)"
+        ShizukuEngine.isOneTimeOptimizationActive(context) -> "chế độ độc lập sau khởi động lại (NetPolicy/AppOps, Shizuku tắt)"
+        else -> "trực tiếp (chưa từng kích hoạt Shizuku)"
     }
 
     fun snapshot(context: Context): String {
@@ -82,6 +84,9 @@ object RomDiagnostics {
         sb.append("Ứng dụng Shizuku cài: ${isInstalled(context, SHIZUKU_PACKAGE)}")
         sb.append(" • đang chạy: ${ShizukuEngine.isShizukuAvailable()}")
         sb.append(" • đã cấp quyền: ${ShizukuEngine.hasShizukuPermission()}\n")
+        sb.append("Đã kích hoạt 1-chạm (chế độ độc lập): ${ShizukuEngine.isOneTimeOptimizationActive(context)}")
+        sb.append(" • cùng chu kỳ boot: ${ShizukuEngine.isIsolatedInCurrentBoot(context)}")
+        sb.append(" • bootCount hiện tại: ${ShizukuEngine.getCurrentBootCount(context)}\n")
         sb.append("Đường gửi dự kiến: ${predictedPath(context)}\n")
 
         sb.append("--- Thông báo ---\n")

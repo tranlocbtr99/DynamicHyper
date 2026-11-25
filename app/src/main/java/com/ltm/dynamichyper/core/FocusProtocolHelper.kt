@@ -94,8 +94,13 @@ object FocusProtocolHelper {
         }
         if (sysProtocol in 1..3) return sysProtocol
 
-        // Nếu chưa set trong Settings.System, đoán theo phiên bản Android SDK
+        // Nếu chưa set trong Settings.System, đọc từ ro.mi.os.version.name hoặc phiên bản Android SDK
+        val osVer = RomDiagnostics.prop("ro.mi.os.version.name")
         return when {
+            osVer.startsWith("OS3", true) || osVer.startsWith("OS4", true) -> 3
+            osVer.startsWith("OS2", true) -> 2
+            osVer.startsWith("OS1", true) -> 1
+            Build.VERSION.SDK_INT >= 36 -> 3 // Android 16/17 (HyperOS 3/4)
             Build.VERSION.SDK_INT >= 35 -> 2 // Android 15 (HyperOS 2)
             Build.VERSION.SDK_INT >= 34 -> 1 // Android 14 (HyperOS 1)
             else -> 1

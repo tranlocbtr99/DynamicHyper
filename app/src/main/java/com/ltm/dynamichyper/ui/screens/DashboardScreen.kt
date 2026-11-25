@@ -149,6 +149,7 @@ private fun OverviewTabScreen(
     var showRestrictedDialog by remember { mutableStateOf(false) }
     var isBatteryOptimizationIgnored by remember { mutableStateOf(PermissionHelper.isBatteryOptimizationIgnored(context)) }
     var isShizukuReady by remember { mutableStateOf(ShizukuEngine.hasShizukuPermission()) }
+    var isOneTimeActivated by remember { mutableStateOf(ShizukuEngine.isOneTimeOptimizationActive(context)) }
     var isLockscreenOpGranted by remember { mutableStateOf(PermissionHelper.isMiuiOpAllowed(context, 10008)) }
     var isAutoStartGranted by remember {
         mutableStateOf(PermissionHelper.isAutoStartOrLockscreenGranted(context, isAutoStartMarked))
@@ -176,6 +177,7 @@ private fun OverviewTabScreen(
                 isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, 10008)
                 isAutoStartGranted = PermissionHelper.isAutoStartOrLockscreenGranted(context, isAutoStartMarked)
                 isShizukuReady = ShizukuEngine.hasShizukuPermission()
+                isOneTimeActivated = ShizukuEngine.isOneTimeOptimizationActive(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -201,6 +203,7 @@ private fun OverviewTabScreen(
         isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, 10008)
         isAutoStartGranted = PermissionHelper.isAutoStartOrLockscreenGranted(context, isAutoStartMarked)
         isShizukuReady = ShizukuEngine.hasShizukuPermission()
+        isOneTimeActivated = ShizukuEngine.isOneTimeOptimizationActive(context)
     }
 
     val isInstallGranted = PermissionHelper.canRequestPackageInstalls(context)
@@ -451,7 +454,8 @@ private fun OverviewTabScreen(
         }
 
         // Hero Status & Điều Khiển 1-Chạm (Apple Liquid Glass Clean Design)
-        val isAllReady = isShizukuReady && isNotificationAccessGranted && isPostNotificationGranted && isFloatingNotificationGranted
+        val isShizukuOrStandaloneReady = isShizukuReady || isOneTimeActivated
+        val isAllReady = isShizukuOrStandaloneReady && isNotificationAccessGranted && isPostNotificationGranted && isFloatingNotificationGranted
         LiquidGlassCard(hazeState = hazeState) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -474,11 +478,22 @@ private fun OverviewTabScreen(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isAllReady) "Đảo Đang Hoạt Động" else "Kích Hoạt Tự Động",
+                        text = when {
+                            isAllReady && !isShizukuReady && isOneTimeActivated -> "Đảo Hoạt Động Độc Lập 24/7"
+                            isAllReady -> "Đảo Đang Hoạt Động"
+                            else -> "Kích Hoạt Tự Động"
+                        },
                         style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     )
                     Text(
-                        text = if (isAllReady) "Đã tối ưu Shizuku & kết nối SystemUI thành công" else "Tự động cấp quyền và đồng bộ hệ thống HyperOS",
+                        text = when {
+                            isAllReady && !isShizukuReady && isOneTimeActivated ->
+                                "Đã khóa XMSF 1 lần • Hoạt động ngay cả khi tắt Shizuku & Wireless Debugging"
+                            isAllReady ->
+                                "Đã khóa XMSF vĩnh viễn • Có thể tắt Wireless Debugging & Shizuku"
+                            else ->
+                                "Cấp Shizuku 1 lần để khóa XMSF, sau đó có thể tắt Wireless Debugging"
+                        },
                         style = Typography.bodyMedium.copy(fontSize = 12.sp, color = if (isAllReady) AppleTeal else TextSecondary)
                     )
                 }
@@ -492,6 +507,7 @@ private fun OverviewTabScreen(
                 onClick = {
                     if (ShizukuEngine.isShizukuAvailable() && ShizukuEngine.hasShizukuPermission()) {
                         ShizukuEngine.applyXmsfBypass(context)
+                        isOneTimeActivated = true
                     }
                     IdleIslandManager.resetCache()
                     IdleIslandManager.showIdleIsland(context, idleIslandWidth, force = true)
@@ -500,11 +516,11 @@ private fun OverviewTabScreen(
                 }
             )
 
-            // Nút phụ Kích hoạt / Tối ưu hóa (Hiển thị tinh tế dạng nút Outline khi cần thiết)
-            if (!isAllReady || !isShizukuReady) {
+            // Nút phụ Kích hoạt / Tối ưu hóa (Ẩn khi đã kích hoạt 1 lần và đủ quyền để giao diện sạch sẽ)
+            if (!isAllReady) {
                 Spacer(modifier = Modifier.height(8.dp))
                 LiquidActionButton(
-                    text = if (isShizukuReady) "TỰ ĐỘNG TỐI ƯU HÓA HỆ THỐNG (SHIZUKU)" else "KÍCH HOẠT NHANH TẤT CẢ QUYỀN",
+                    text = if (isShizukuReady) "KÍCH HOẠT 1 LẦN (TẮT SHIZUKU VẪN CHẠY)" else "KÍCH HOẠT NHANH TẤT CẢ QUYỀN",
                     onClick = {
                         if (ShizukuEngine.isShizukuAvailable()) {
                             if (!ShizukuEngine.hasShizukuPermission()) {
@@ -513,6 +529,7 @@ private fun OverviewTabScreen(
                                 val success = ShizukuEngine.applyOneTouchOptimizations(context)
                                 PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
                                 isShizukuReady = true
+                                isOneTimeActivated = ShizukuEngine.isOneTimeOptimizationActive(context)
                                 isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
                                 isPostNotificationGranted = PermissionHelper.isPostNotificationGranted(context)
                                 isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
@@ -524,8 +541,8 @@ private fun OverviewTabScreen(
                                 IdleIslandManager.showIdleIsland(context, idleIslandWidth)
                                 Toast.makeText(
                                     context,
-                                    if (success) "Đã tối ưu hóa thành công 100%! Đảo đã kích hoạt." else "Đã áp dụng tối ưu hóa hệ thống.",
-                                    Toast.LENGTH_SHORT
+                                    if (success) "Đã kích hoạt 1 lần thành công! Bây giờ bạn có thể tắt Wireless Debugging & Shizuku." else "Đã áp dụng tối ưu hóa hệ thống.",
+                                    Toast.LENGTH_LONG
                                 ).show()
                             }
                         } else {
