@@ -50,7 +50,7 @@
 ## 📥 Tải về & Cài đặt
 
 Bản phát hành chính thức mới nhất luôn có sẵn tại:
-👉 **[Tải APK Dynamic Hyper v1.5.3 (GitHub Releases)](https://github.com/tranlocbtr99/DynamicHyper/releases/latest/download/DynamicHyper-v1.5.3.apk)**
+👉 **[Tải APK Dynamic Hyper v2.2.0 (GitHub Releases)](https://github.com/tranlocbtr99/DynamicHyper/releases/latest/download/DynamicHyper-v2.2.0.apk)**
 
 ### Các quyền cần thiết:
 1. **Truy cập Thông báo (Notification Listener)**: Để nhận và hiển thị thông báo ứng dụng lên đảo.
