@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.ltm.dynamichyper.core.AppLogger
+import com.ltm.dynamichyper.core.IslandProbe
 import com.ltm.dynamichyper.ui.theme.*
 import kotlinx.coroutines.launch
 
@@ -40,6 +41,7 @@ fun DiagnosticLogDialog(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val logs by AppLogger.logsFlow.collectAsState()
+    val probeStats by IslandProbe.stats.collectAsState()
     val listState = rememberLazyListState()
 
     var selectedFilter by remember { mutableStateOf<AppLogger.LogLevel?>(null) }
@@ -157,6 +159,15 @@ fun DiagnosticLogDialog(
                         label = { Text("Thông tin", fontSize = 11.sp, color = if (selectedFilter == AppLogger.LogLevel.INFO) Color.White else AppleBlue) }
                     )
                 }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Kết quả dò đảo: đảo có sống sót sau khi app gửi không
+                Text(
+                    text = "Dò đảo: ${probeStats.summary()}",
+                    color = if (probeStats.lost > 0) AppleOrange else TextSecondary,
+                    fontSize = 11.sp
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
 

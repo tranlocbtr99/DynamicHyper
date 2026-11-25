@@ -14,8 +14,9 @@ class DynamicHyperApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        AppLogger.init(this)
         Log.i(TAG, "DynamicHyperApp initialized successfully")
-        AppLogger.i(TAG, "DynamicHyperApp khởi động phiên bản v2.0.7-beta thành công")
+        AppLogger.i(TAG, "DynamicHyperApp khởi động phiên bản v${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})")
 
         // Khởi tạo kênh thông báo hệ thống an toàn ngay từ Application
         try {

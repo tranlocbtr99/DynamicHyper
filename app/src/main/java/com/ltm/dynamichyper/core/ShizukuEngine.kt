@@ -195,11 +195,17 @@ object ShizukuEngine {
      * Hoạt động bền vững 24/7 theo chuẩn HyperBridge LTM v0.6.0-ltm.3.
      */
     suspend fun postNotificationSafely(context: Context, id: Int, notification: Notification) {
+        var path = "direct (không có Shizuku)"
         notifyMutex.withLock {
             if (hasShizukuPermission()) {
+                val hasXmsf = RomDiagnostics.isXmsfInstalled(context)
+                var isolated = false
                 try {
                     // Tạm khóa mạng XMSF 50ms qua Shizuku UserService chuẩn HyperBridge để AuthManager pass -400
-                    XmsfNetworkHelper.setXmsfNetworkingEnabled(context, false)
+                    isolated = XmsfNetworkHelper.setXmsfNetworkingEnabled(context, false)
+                    if (!isolated && hasXmsf) {
+                        AppLogger.w(TAG, "Cách ly mạng XMSF THẤT BẠI (id=$id): đảo có thể bị XMSF xóa")
+                    }
                     delay(50)
                     NotificationManagerCompat.from(context).notify(id, notification)
                     Log.d(TAG, "✓ Đã bắn Focus Notification thành công (id=$id)")
@@ -208,10 +214,17 @@ object ShizukuEngine {
                     // Tự động phục hồi mạng cho XMSF để dịch vụ đám mây Xiaomi hoạt động bình thường
                     XmsfNetworkHelper.setXmsfNetworkingEnabled(context, true)
                 }
+                path = when {
+                    !hasXmsf -> "direct (máy không có XMSF)"
+                    isolated -> "cách ly XMSF"
+                    else -> "cách ly XMSF FAILED"
+                }
             } else {
                 NotificationManagerCompat.from(context).notify(id, notification)
                 Log.d(TAG, "✓ Đã bắn Focus Notification (id=$id)")
             }
         }
+        // Dò xem đảo có sống sót sau khi gửi không (chạy nền, không giữ mutex).
+        IslandProbe.track(context, id, path)
     }
 }
