@@ -831,18 +831,18 @@ private fun OverviewTabScreen(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
-                    text = "Giao Diện Đảo Chờ (Hiệu Ứng Động)",
+                    text = "Kiểu Hiển Thị Đảo Chờ",
                     style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AppleTeal, fontSize = 14.sp)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Hàng 1: Tối Giản, Chấm Xanh, Thời Tiết
+                // Hàng 1: Đen Tối Giản, Chấm Xanh iOS, Thời Tiết
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     DevicePresetChip(
-                        name = "Tối Giản",
+                        name = "Đen Tối Giản",
                         selected = idleIslandStyle == "minimal",
                         modifier = Modifier.weight(1f),
                         onClick = {
@@ -853,7 +853,7 @@ private fun OverviewTabScreen(
                         }
                     )
                     DevicePresetChip(
-                        name = "Chấm Xanh",
+                        name = "Chấm Xanh iOS",
                         selected = idleIslandStyle == "green_dot",
                         modifier = Modifier.weight(1f),
                         onClick = {
@@ -878,7 +878,7 @@ private fun OverviewTabScreen(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Hàng 2: Nhiệt Pin, RAM Dùng
+                // Hàng 2: Nhiệt Độ Pin, Bộ Nhớ RAM
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -895,7 +895,7 @@ private fun OverviewTabScreen(
                         }
                     )
                     DevicePresetChip(
-                        name = "RAM Đang Dùng",
+                        name = "Bộ Nhớ RAM",
                         selected = idleIslandStyle == "ram_usage",
                         modifier = Modifier.weight(1f),
                         onClick = {

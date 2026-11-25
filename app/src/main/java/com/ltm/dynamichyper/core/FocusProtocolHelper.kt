@@ -173,7 +173,8 @@ object FocusProtocolHelper {
         isSilent: Boolean = false,
         priority: Int = NotificationCompat.PRIORITY_HIGH,
         contentIntent: android.app.PendingIntent? = null,
-        actionsMap: Map<String, Any> = emptyMap()
+        actionsMap: Map<String, Any> = emptyMap(),
+        enablePromotedLiveUpdate: Boolean = true
     ): Notification {
         // Luôn đảm bảo Channel được khởi tạo với IMPORTANCE_HIGH trước khi build
         setupChannel(context)
@@ -181,14 +182,13 @@ object FocusProtocolHelper {
         focusGate(context)
 
         // Kiểm tra xem thiết bị có đang ở trạng thái China ROM chưa từng kích hoạt Shizuku hay không.
-        // Nếu chưa có Shizuku trên China ROM, việc bật ongoing + PromotedOngoing (Android 16/17 Live Updates)
-        // cho phép HyperOS 3/4 tự động vẽ Đảo theo chuẩn Live Update Design giống HyperBridge mà không bị XMSF chặn -300.
-        val needsNativeLiveUpdateFallback = RomDiagnostics.isChinaRom() &&
+        // Lưu ý: Đảo Chờ (enablePromotedLiveUpdate = false) TUYỆT ĐỐI KHÔNG bật PromotedOngoing hay shortCriticalText
+        // để tránh hiện chip chữ tràn lan trên thanh trạng thái.
+        val needsNativeLiveUpdateFallback = enablePromotedLiveUpdate &&
+            RomDiagnostics.isChinaRom() &&
             !ShizukuEngine.hasShizukuPermission() &&
             !ShizukuEngine.isOneTimeOptimizationActive(context)
         val effectiveOngoing = isOngoing || needsNativeLiveUpdateFallback
-
-        val shortCritical = buildShortCriticalText(title, content)
 
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(smallIconRes)
@@ -199,8 +199,12 @@ object FocusProtocolHelper {
             .setOngoing(effectiveOngoing)
             .setOnlyAlertOnce(onlyAlertOnce)
             .setSilent(isSilent)
-            .setRequestPromotedOngoing(true)
-            .setShortCriticalText(shortCritical)
+
+        if (enablePromotedLiveUpdate) {
+            val shortCritical = buildShortCriticalText(title, content)
+            builder.setRequestPromotedOngoing(true)
+            builder.setShortCriticalText(shortCritical)
+        }
 
         if (contentIntent != null) {
             builder.setContentIntent(contentIntent)

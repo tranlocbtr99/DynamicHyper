@@ -111,54 +111,70 @@ class IdleIslandManager(
                 paramIsland.put("needCloseAnimation", true)
                 paramIsland.put("expandedTime", 0)
 
-                // Tính toán nội dung tiêu đề và màu sắc
+                // Tính toán nội dung gọn gàng và màu sắc (TUYỆT ĐỐI KHÔNG dùng chữ "🟢 Trạng Thái Hệ Thống" gây tràn lan)
                 val weather = WeatherManager.currentData
                 val temp = getBatteryTemperature(context)
                 val ramGb = getUsedRamGb(context)
 
-                val (widgetTitle, widgetContent, highlightColor) = when (style) {
+                val (notifTitle, notifContent, highlightColor) = when (style) {
                     "weather" -> Triple(
-                        "${weather.iconEmoji} ${weather.temp}°C • ${weather.condition}",
+                        "${weather.temp}°C • ${weather.condition}",
                         "${weather.city} • Độ ẩm ${weather.humidity}%",
                         "#FFD60A"
                     )
                     "battery_temp" -> Triple(
-                        "🔋 ${temp}°C • ${if (temp < 38) "Pin Mát Mẻ" else if (temp <= 42) "Pin Ấm Áp" else "Pin Đang Nóng!"}",
-                        "Nhiệt độ pin hệ thống • Tình trạng tốt",
+                        "Pin ${temp}°C",
+                        if (temp < 38) "Nhiệt độ mát" else if (temp <= 42) "Nhiệt độ ấm" else "Pin đang nóng",
                         if (temp < 38) "#30D158" else if (temp <= 42) "#FF9F0A" else "#FF453A"
                     )
                     "ram_usage" -> Triple(
-                        "⚡ RAM Đang Dùng: $ramGb GB",
-                        "Đa nhiệm HyperOS mượt mà",
+                        "RAM $ramGb GB",
+                        "Đa nhiệm hệ thống",
                         "#00F2FE"
                     )
                     "green_dot" -> Triple(
-                        "🟢 Trạng Thái Hệ Thống",
-                        "Dynamic Hyper đang hoạt động 24/7",
+                        "Dynamic Hyper",
+                        "Idle Island",
                         "#30D158"
                     )
                     else -> Triple(
                         "Dynamic Hyper",
-                        "Đảo Chờ Đang Hoạt Động",
-                        "#000000"
+                        "Idle Island",
+                        "#FFFFFF"
                     )
                 }
 
                 paramIsland.put("highlightColor", highlightColor)
 
-                // bigIslandArea
+                // bigIslandArea:
+                // - Với "minimal" và "green_dot": Chuẩn HyperBridge PermanentIslandManager (chỉ có khoảng trắng điều chỉnh độ rộng,
+                //   KHÔNG gắn picInfo hay chữ thừa để không bao giờ hiện khung chữ tràn lan).
+                // - Với các kiểu widget thông số ("weather", "battery_temp", "ram_usage"): Hiển thị gọn gàng khi chạm vào đảo.
                 val bigIslandArea = org.json.JSONObject()
                 val leftInfo = org.json.JSONObject()
                 leftInfo.put("type", 1)
-                val leftPic = org.json.JSONObject()
-                leftPic.put("type", 1)
-                leftPic.put("pic", "miui.focus.pic_$PIC_IDLE_LEFT")
-                leftInfo.put("picInfo", leftPic)
                 val leftText = org.json.JSONObject()
                 leftText.put("title", emptyString)
                 leftText.put("content", emptyString)
                 leftText.put("showHighlightColor", false)
                 leftInfo.put("textInfo", leftText)
+
+                if (style == "weather" || style == "battery_temp" || style == "ram_usage") {
+                    val leftPic = org.json.JSONObject()
+                    leftPic.put("type", 1)
+                    leftPic.put("pic", "miui.focus.pic_$PIC_IDLE_LEFT")
+                    leftInfo.put("picInfo", leftPic)
+
+                    val rightInfo = org.json.JSONObject()
+                    rightInfo.put("type", 1)
+                    val rightText = org.json.JSONObject()
+                    rightText.put("title", notifTitle)
+                    rightText.put("content", notifContent)
+                    rightText.put("showHighlightColor", true)
+                    rightInfo.put("textInfo", rightText)
+                    bigIslandArea.put("imageTextInfoRight", rightInfo)
+                }
+
                 bigIslandArea.put("imageTextInfoLeft", leftInfo)
                 paramIsland.put("bigIslandArea", bigIslandArea)
 
@@ -172,22 +188,20 @@ class IdleIslandManager(
 
                 paramV2.put("param_island", paramIsland)
 
-                val iconTextInfo = org.json.JSONObject()
-                iconTextInfo.put("title", widgetTitle)
-                iconTextInfo.put("content", widgetContent)
-                paramV2.put("iconTextInfo", iconTextInfo)
-
+                // Lưu ý quan trọng: TUYỆT ĐỐI KHÔNG gắn iconTextInfo hay baseInfo vào Đảo Chờ
+                // (giống hệt PermanentIslandManager của HyperBridge) để SystemUI không vẽ thẻ thông báo rác!
                 root.put("param_v2", paramV2)
                 root.put("isShowNotification", true)
 
                 val dotBitmap = renderIdleDotBitmap(context, style)
-                val leftBitmap = renderBigWidgetIcon(context, style)
-
-                val pics = mapOf(
-                    PIC_IDLE_DOT to dotBitmap,
-                    PIC_IDLE_LEFT to leftBitmap,
-                    "hidden_pixel" to Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
-                )
+                val pics = if (style == "weather" || style == "battery_temp" || style == "ram_usage") {
+                    mapOf(
+                        PIC_IDLE_DOT to dotBitmap,
+                        PIC_IDLE_LEFT to renderBigWidgetIcon(context, style)
+                    )
+                } else {
+                    mapOf(PIC_IDLE_DOT to dotBitmap)
+                }
 
                 val contentIntent = android.app.PendingIntent.getActivity(
                     context,
@@ -198,7 +212,7 @@ class IdleIslandManager(
                     android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
                 )
 
-                val currentText = "$style|$widgetTitle|$widgetContent|$effectiveWidth"
+                val currentText = "$style|$notifTitle|$notifContent|$effectiveWidth"
                 if (!force && lastDispatchedWidgetText == currentText && instance?.isShowing == true) {
                     return
                 }
@@ -206,8 +220,8 @@ class IdleIslandManager(
 
                 val notification = FocusProtocolHelper.buildFocusNotification(
                     context = context,
-                    title = widgetTitle,
-                    content = widgetContent,
+                    title = notifTitle,
+                    content = notifContent,
                     smallIconRes = R.drawable.ic_launcher_foreground,
                     jsonParam = root.toString(),
                     pics = pics,
@@ -215,11 +229,12 @@ class IdleIslandManager(
                     onlyAlertOnce = true,
                     isSilent = true,
                     priority = androidx.core.app.NotificationCompat.PRIORITY_HIGH,
-                    contentIntent = contentIntent
+                    contentIntent = contentIntent,
+                    enablePromotedLiveUpdate = false // Tắt PromotedOngoing trên Đảo Chờ để không hiện chip chữ tràn lan
                 )
 
                 FocusProtocolHelper.postNotificationSafely(context, IDLE_ISLAND_ID, notification)
-                com.ltm.dynamichyper.core.AppLogger.i(TAG, "Đã gửi thông báo Đảo Chờ (style=$style, width=$effectiveWidth, pri=HIGH, silent=true, isShowNotification=true)")
+                com.ltm.dynamichyper.core.AppLogger.i(TAG, "Đã gửi thông báo Đảo Chờ (style=$style, width=$effectiveWidth, clean=true)")
             } catch (e: Exception) {
                 Log.e(TAG, "Error direct dispatch: ${e.message}")
                 com.ltm.dynamichyper.core.AppLogger.e(TAG, "Lỗi gửi thông báo Đảo Chờ: ${e.message}", e)
@@ -227,41 +242,28 @@ class IdleIslandManager(
         }
 
         /**
-         * Vẽ bitmap chuẩn slot viên thuốc của Xiaomi SystemUI.
-         * Nền Dark Capsule #E6000000 bo tròn có viền kính mờ để hiển thị sắc nét trên cả Theme Sáng lẫn Theme Tối.
+         * Vẽ bitmap 96x96 cho slot smallIslandArea của Xiaomi SystemUI.
+         * QUAN TRỌNG: Nền phải TRONG SUỐT 100% (Color.TRANSPARENT) vì SystemUI đã tự vẽ sẵn viên thuốc
+         * màu đen tuyền ôm quanh camera. Tuyệt đối không vẽ khung hộp đè lên để tránh hiệu ứng "viên thuốc lồng viên thuốc".
          */
         private fun renderIdleDotBitmap(context: Context, style: String): Bitmap {
             val bmpSize = 96
-            if (style == "minimal") {
-                // Giống HyperBridge: Bitmap trong suốt 96x96 để SystemUI vẽ nốt ruồi tự nhiên chuẩn xác
-                return Bitmap.createBitmap(bmpSize, bmpSize, Bitmap.Config.ARGB_8888)
-            }
             val bmp = Bitmap.createBitmap(bmpSize, bmpSize, Bitmap.Config.ARGB_8888)
+            if (style == "minimal") {
+                // Giống HyperBridge: Bitmap trong suốt hoàn toàn để SystemUI vẽ viên thuốc đen ôm sát nốt ruồi tự nhiên
+                return bmp
+            }
             val canvas = Canvas(bmp)
-
-            // Vẽ nền viên thuốc Dark Capsule bo tròn tương phản cao
-            val capsuleRect = RectF(2f, 10f, bmpSize - 2f, bmpSize - 10f)
-            val capsulePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.parseColor("#E6000000") // 90% đen nhung
-            }
-            canvas.drawRoundRect(capsuleRect, 38f, 38f, capsulePaint)
-
-            val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                this.style = Paint.Style.STROKE
-                strokeWidth = 2f
-                color = Color.parseColor("#33FFFFFF") // Viền kính mờ tinh tế
-            }
-            canvas.drawRoundRect(capsuleRect, 38f, 38f, borderPaint)
-
             val cx = bmpSize / 2f
             val cy = bmpSize / 2f
 
             when (style) {
                 "green_dot" -> {
+                    // Chấm tròn chỉ báo phong cách iOS Camera/Mic Indicator: nhỏ gọn, sắc nét trên nền trong suốt
                     val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         shader = RadialGradient(
                             cx, cy, 18f,
-                            Color.parseColor("#8030D158"),
+                            Color.parseColor("#5530D158"),
                             Color.TRANSPARENT,
                             Shader.TileMode.CLAMP
                         )
@@ -271,21 +273,20 @@ class IdleIslandManager(
                     val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         color = Color.parseColor("#30D158")
                     }
-                    canvas.drawCircle(cx, cy, 8f, dotPaint)
+                    canvas.drawCircle(cx, cy, 9f, dotPaint)
                 }
                 "battery_temp" -> {
                     val temp = getBatteryTemperature(context)
                     val textColor = when {
-                        temp < 38 -> Color.parseColor("#30D158") // Xanh mát
-                        temp <= 42 -> Color.parseColor("#FF9F0A") // Ấm
-                        else -> Color.parseColor("#FF453A") // Nóng
+                        temp < 38 -> Color.parseColor("#30D158")
+                        temp <= 42 -> Color.parseColor("#FF9F0A")
+                        else -> Color.parseColor("#FF453A")
                     }
                     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        textSize = 42f
+                        textSize = 38f
                         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         textAlign = Paint.Align.CENTER
                         color = textColor
-                        setShadowLayer(8f, 0f, 0f, textColor)
                     }
                     val y = cy - ((textPaint.descent() + textPaint.ascent()) / 2f)
                     canvas.drawText("${temp}°", cx, y, textPaint)
@@ -293,11 +294,10 @@ class IdleIslandManager(
                 "ram_usage" -> {
                     val ramText = getUsedRamGb(context)
                     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        textSize = 40f
+                        textSize = 36f
                         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         textAlign = Paint.Align.CENTER
                         color = Color.parseColor("#00F2FE")
-                        setShadowLayer(8f, 0f, 0f, Color.parseColor("#00F2FE"))
                     }
                     val y = cy - ((textPaint.descent() + textPaint.ascent()) / 2f)
                     canvas.drawText(ramText, cx, y, textPaint)
@@ -305,23 +305,13 @@ class IdleIslandManager(
                 "weather" -> {
                     val weather = WeatherManager.currentData
                     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        textSize = 42f
+                        textSize = 38f
                         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         textAlign = Paint.Align.CENTER
                         color = Color.parseColor("#FFD60A")
-                        setShadowLayer(8f, 0f, 0f, Color.parseColor("#FFD60A"))
                     }
                     val y = cy - ((textPaint.descent() + textPaint.ascent()) / 2f)
                     canvas.drawText("${weather.temp}°", cx, y, textPaint)
-                }
-                else -> {
-                    // "minimal" -> Viên thuốc đen nhung có viền sáng viền camera
-                    val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                        this.style = Paint.Style.STROKE
-                        strokeWidth = 3f
-                        color = Color.parseColor("#4D30D158") // Vòng sáng Neon xanh nhẹ
-                    }
-                    canvas.drawCircle(cx, cy, 14f, ringPaint)
                 }
             }
             return bmp
