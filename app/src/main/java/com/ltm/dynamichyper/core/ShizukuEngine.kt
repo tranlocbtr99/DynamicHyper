@@ -25,6 +25,7 @@ object ShizukuEngine {
     private const val KEY_ACTIVATED_TIMESTAMP = "one_time_timestamp"
 
     private val notifyMutex = Mutex()
+    private val postedActiveIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
 
     fun isShizukuAvailable(): Boolean {
         return try {
@@ -290,6 +291,18 @@ object ShizukuEngine {
      *   và cho phép Đảo hiển thị bình thường!
      */
     suspend fun postNotificationSafely(context: Context, id: Int, notification: Notification) {
+        val isOnlyAlertOnce = (notification.flags and Notification.FLAG_ONLY_ALERT_ONCE) != 0
+        val alreadyActive = postedActiveIds.contains(id)
+
+        // Cơ chế In-Place Update của HyperBridge:
+        // Khi một notificationId đã được đăng lên thanh trạng thái rồi và lần gọi này chỉ là cập nhật tại chỗ
+        // (onlyAlertOnce = true), SystemUI cập nhật thẳng nội dung Đảo mà không gọi lại AuthManager/XMSF.
+        if (alreadyActive && isOnlyAlertOnce && XmsfNetworkHelper.isBlockedInCurrentSession) {
+            NotificationManagerCompat.from(context).notify(id, notification)
+            IslandProbe.track(context, id, "in-place update (0ms, XMSF đã khóa)")
+            return
+        }
+
         var path: String
         notifyMutex.withLock {
             val hasXmsf = RomDiagnostics.isXmsfInstalled(context)
@@ -305,6 +318,7 @@ object ShizukuEngine {
                     AppLogger.w(TAG, "Khóa mạng XMSF thất bại (id=$id): đảo có thể bị XMSF xóa")
                 }
                 NotificationManagerCompat.from(context).notify(id, notification)
+                postedActiveIds.add(id)
                 Log.d(TAG, "✓ Đã bắn Focus Notification thành công (id=$id, keepBlocked=true)")
                 path = when {
                     !hasXmsf -> "direct (máy không có XMSF)"
@@ -312,16 +326,17 @@ object ShizukuEngine {
                     else -> "cách ly XMSF FAILED"
                 }
             } else {
-                // Shizuku đã tắt (người dùng đã tắt Wireless Debugging) -> Bắn trực tiếp 0ms
+                // Shizuku đã tắt (người dùng đã tắt Wireless Debugging) hoặc máy chưa cài Shizuku -> Bắn trực tiếp 0ms
                 NotificationManagerCompat.from(context).notify(id, notification)
+                postedActiveIds.add(id)
                 val sameBoot = isIsolatedInCurrentBoot(context)
                 val everActivated = isOneTimeOptimizationActive(context)
-                Log.d(TAG, "✓ Đã bắn Focus Notification ở chế độ độc lập (id=$id, sameBoot=$sameBoot, ever=$everActivated)")
+                Log.d(TAG, "✓ Đã bắn Focus Notification ở chế độ độc lập / Hybrid LiveUpdate (id=$id, sameBoot=$sameBoot, ever=$everActivated)")
                 path = when {
                     !hasXmsf -> "direct (máy không có XMSF)"
                     sameBoot -> "chế độ độc lập (XMSF đã khóa từ trước, Shizuku tắt)"
                     everActivated -> "chế độ độc lập sau khởi động lại (NetPolicy/AppOps, Shizuku tắt)"
-                    else -> "direct (chưa từng kích hoạt Shizuku)"
+                    else -> "hybrid Focus + Android 16 Promoted LiveUpdate (chưa từng kích hoạt Shizuku)"
                 }
             }
         }

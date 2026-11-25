@@ -180,15 +180,27 @@ object FocusProtocolHelper {
         // Chẩn đoán cổng Focus Island (ghi log một lần)
         focusGate(context)
 
+        // Kiểm tra xem thiết bị có đang ở trạng thái China ROM chưa từng kích hoạt Shizuku hay không.
+        // Nếu chưa có Shizuku trên China ROM, việc bật ongoing + PromotedOngoing (Android 16/17 Live Updates)
+        // cho phép HyperOS 3/4 tự động vẽ Đảo theo chuẩn Live Update Design giống HyperBridge mà không bị XMSF chặn -300.
+        val needsNativeLiveUpdateFallback = RomDiagnostics.isChinaRom() &&
+            !ShizukuEngine.hasShizukuPermission() &&
+            !ShizukuEngine.isOneTimeOptimizationActive(context)
+        val effectiveOngoing = isOngoing || needsNativeLiveUpdateFallback
+
+        val shortCritical = buildShortCriticalText(title, content)
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(smallIconRes)
             .setContentTitle(title)
             .setContentText(content)
             .setPriority(priority)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setOngoing(isOngoing)
+            .setOngoing(effectiveOngoing)
             .setOnlyAlertOnce(onlyAlertOnce)
             .setSilent(isSilent)
+            .setRequestPromotedOngoing(true)
+            .setShortCriticalText(shortCritical)
 
         if (contentIntent != null) {
             builder.setContentIntent(contentIntent)
@@ -226,7 +238,7 @@ object FocusProtocolHelper {
         val patchedJson = patchIslandJson(jsonParam, targetIslandProperty, targetProtocol)
 
         val notif = builder.build()
-        if (isOngoing) {
+        if (effectiveOngoing) {
             notif.flags = notif.flags or Notification.FLAG_ONGOING_EVENT or Notification.FLAG_NO_CLEAR
         }
         notif.extras.putString("miui.focus.param", patchedJson)
@@ -254,6 +266,26 @@ object FocusProtocolHelper {
             }
         } catch (_: Exception) {}
         return notif
+    }
+
+    private fun buildShortCriticalText(title: String, content: String): String {
+        // Trích xuất % pin / tiến trình hoặc thời gian nếu có (chuẩn LiveUpdateTranslator của HyperBridge)
+        val combined = "$title $content"
+        val percentMatch = Regex("(\\d{1,3})%").find(combined)
+        if (percentMatch != null) return percentMatch.value
+
+        val wattMatch = Regex("(\\d+(?:[.,]\\d+)?)\\s*W", RegexOption.IGNORE_CASE).find(combined)
+        if (wattMatch != null) return wattMatch.value
+
+        val tempMatch = Regex("(\\d{1,2})°C").find(combined)
+        if (tempMatch != null) return tempMatch.value
+
+        val cleanTitle = title.trim()
+        if (cleanTitle.isNotEmpty()) {
+            return if (cleanTitle.length <= 14) cleanTitle else cleanTitle.take(13) + "…"
+        }
+        val cleanContent = content.trim()
+        return if (cleanContent.length <= 14) cleanContent else cleanContent.take(13) + "…"
     }
 
     private fun patchIslandJson(json: String, property: Int, protocol: Int): String {
