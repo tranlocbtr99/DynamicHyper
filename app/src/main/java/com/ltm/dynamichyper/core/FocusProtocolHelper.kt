@@ -298,7 +298,9 @@ object FocusProtocolHelper {
             val paramV2 = root.getAsJsonObject("param_v2") ?: root
             val island = paramV2.getAsJsonObject("param_island") ?: root
             island.addProperty("islandProperty", property)
-            paramV2.addProperty("protocol", protocol)
+            // Chuẩn hyperisland_kit của HyperBridge: trường "protocol" trong JSON param_v2 luôn là 1
+            // để FocusPlugin.createStandardTemplate dựng đầy đủ islandExpandedView khi người dùng chạm vào đảo.
+            paramV2.addProperty("protocol", 1)
             Gson().toJson(root)
         } catch (_: Exception) {
             json

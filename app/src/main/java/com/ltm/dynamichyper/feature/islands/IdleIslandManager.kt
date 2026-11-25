@@ -53,6 +53,7 @@ class IdleIslandManager(
 
         fun hideIdleIsland(context: Context) {
             try {
+                com.ltm.dynamichyper.core.ShizukuEngine.clearPostedActiveId(IDLE_ISLAND_ID)
                 NotificationManagerCompat.from(context).cancel(IDLE_ISLAND_ID)
             } catch (e: Exception) {
                 Log.e(TAG, "Error hiding idle island: ${e.message}")
@@ -119,37 +120,34 @@ class IdleIslandManager(
                 val (notifTitle, notifContent, highlightColor) = when (style) {
                     "weather" -> Triple(
                         "${weather.temp}°C • ${weather.condition}",
-                        "${weather.city} • Độ ẩm ${weather.humidity}%",
+                        "${weather.city} • Độ ẩm ${weather.humidity}% • Pin ${temp}°C",
                         "#FFD60A"
                     )
                     "battery_temp" -> Triple(
-                        "Pin ${temp}°C",
-                        if (temp < 38) "Nhiệt độ mát" else if (temp <= 42) "Nhiệt độ ấm" else "Pin đang nóng",
+                        "Pin ${temp}°C • ${if (temp < 38) "Mát mẻ" else if (temp <= 42) "Ấm" else "Nóng"}",
+                        "RAM $ramGb GB • Thời tiết ${weather.temp}°C",
                         if (temp < 38) "#30D158" else if (temp <= 42) "#FF9F0A" else "#FF453A"
                     )
                     "ram_usage" -> Triple(
-                        "RAM $ramGb GB",
-                        "Đa nhiệm hệ thống",
+                        "RAM $ramGb GB • Đa nhiệm mượt",
+                        "Pin ${temp}°C • Thời tiết ${weather.temp}°C",
                         "#00F2FE"
                     )
                     "green_dot" -> Triple(
-                        "Dynamic Hyper",
-                        "Idle Island",
+                        "Dynamic Hyper • Đảo Chờ",
+                        "Pin ${temp}°C • RAM $ramGb GB • ${weather.temp}°C",
                         "#30D158"
                     )
                     else -> Triple(
-                        "Dynamic Hyper",
-                        "Idle Island",
+                        "Dynamic Hyper • Đảo Chờ",
+                        "Pin ${temp}°C • RAM $ramGb GB • ${weather.temp}°C",
                         "#FFFFFF"
                     )
                 }
 
                 paramIsland.put("highlightColor", highlightColor)
 
-                // bigIslandArea:
-                // - Với "minimal" và "green_dot": Chuẩn HyperBridge PermanentIslandManager (chỉ có khoảng trắng điều chỉnh độ rộng,
-                //   KHÔNG gắn picInfo hay chữ thừa để không bao giờ hiện khung chữ tràn lan).
-                // - Với các kiểu widget thông số ("weather", "battery_temp", "ram_usage"): Hiển thị gọn gàng khi chạm vào đảo.
+                // bigIslandArea: Giữ viên thuốc thu gọn ôm sát nốt ruồi camera
                 val bigIslandArea = org.json.JSONObject()
                 val leftInfo = org.json.JSONObject()
                 leftInfo.put("type", 1)
@@ -158,23 +156,6 @@ class IdleIslandManager(
                 leftText.put("content", emptyString)
                 leftText.put("showHighlightColor", false)
                 leftInfo.put("textInfo", leftText)
-
-                if (style == "weather" || style == "battery_temp" || style == "ram_usage") {
-                    val leftPic = org.json.JSONObject()
-                    leftPic.put("type", 1)
-                    leftPic.put("pic", "miui.focus.pic_$PIC_IDLE_LEFT")
-                    leftInfo.put("picInfo", leftPic)
-
-                    val rightInfo = org.json.JSONObject()
-                    rightInfo.put("type", 1)
-                    val rightText = org.json.JSONObject()
-                    rightText.put("title", notifTitle)
-                    rightText.put("content", notifContent)
-                    rightText.put("showHighlightColor", true)
-                    rightInfo.put("textInfo", rightText)
-                    bigIslandArea.put("imageTextInfoRight", rightInfo)
-                }
-
                 bigIslandArea.put("imageTextInfoLeft", leftInfo)
                 paramIsland.put("bigIslandArea", bigIslandArea)
 
@@ -188,20 +169,32 @@ class IdleIslandManager(
 
                 paramV2.put("param_island", paramIsland)
 
-                // Lưu ý quan trọng: TUYỆT ĐỐI KHÔNG gắn iconTextInfo hay baseInfo vào Đảo Chờ
-                // (giống hệt PermanentIslandManager của HyperBridge) để SystemUI không vẽ thẻ thông báo rác!
+                // baseInfo + iconTextInfo (areaAModule): Bắt buộc phải có để FocusPlugin dựng islandExpandedView != null
+                // giúp người dùng chạm vào Đảo Chờ sẽ bung ra thẻ xem nhanh thông số máy (Pin, RAM, Thời tiết).
+                val baseInfo = org.json.JSONObject()
+                baseInfo.put("type", 2)
+                baseInfo.put("title", notifTitle)
+                baseInfo.put("content", notifContent)
+                paramV2.put("baseInfo", baseInfo)
+
+                val iconTextInfo = org.json.JSONObject()
+                val animIconInfo = org.json.JSONObject()
+                animIconInfo.put("type", 1)
+                animIconInfo.put("src", "miui.focus.pic_$PIC_IDLE_LEFT")
+                iconTextInfo.put("animIconInfo", animIconInfo)
+                iconTextInfo.put("title", notifTitle)
+                iconTextInfo.put("content", notifContent)
+                paramV2.put("iconTextInfo", iconTextInfo)
+
                 root.put("param_v2", paramV2)
                 root.put("isShowNotification", true)
 
                 val dotBitmap = renderIdleDotBitmap(context, style)
-                val pics = if (style == "weather" || style == "battery_temp" || style == "ram_usage") {
-                    mapOf(
-                        PIC_IDLE_DOT to dotBitmap,
-                        PIC_IDLE_LEFT to renderBigWidgetIcon(context, style)
-                    )
-                } else {
-                    mapOf(PIC_IDLE_DOT to dotBitmap)
-                }
+                val leftBitmap = renderBigWidgetIcon(context, style)
+                val pics = mapOf(
+                    PIC_IDLE_DOT to dotBitmap,
+                    PIC_IDLE_LEFT to leftBitmap
+                )
 
                 val contentIntent = android.app.PendingIntent.getActivity(
                     context,
@@ -217,6 +210,10 @@ class IdleIslandManager(
                     return
                 }
                 lastDispatchedWidgetText = currentText
+
+                if (force) {
+                    com.ltm.dynamichyper.core.ShizukuEngine.clearPostedActiveId(IDLE_ISLAND_ID)
+                }
 
                 val notification = FocusProtocolHelper.buildFocusNotification(
                     context = context,
@@ -512,18 +509,21 @@ class IdleIslandManager(
     }
 
     /**
-     * Khôi phục Đảo Chờ 24/7 êm ái, có debounce 150ms chống xung đột sự kiện dồn dập
+     * Khôi phục Đảo Chờ 24/7 êm ái.
+     * Chuẩn PermanentIslandManager của HyperBridge (DISPATCH_DELAY_MS = 700L):
+     * Khi thông báo trước vừa bị đóng/xóa, phải đợi 700ms để HyperOS hoàn tất animation thu đóng đảo cũ,
+     * nếu bắn lại 9999 quá sớm (150ms) HyperOS sẽ nuốt mất hiển thị của 9999!
      */
-    fun reassert(force: Boolean = true) {
+    fun reassert(force: Boolean = true, delayMs: Long = 700L) {
         pendingJob?.cancel()
         pendingJob = scope.launch {
-            delay(150L)
+            delay(delayMs)
             if (prefs.isIdleIslandEnabled.first() && activeEventCount <= 0) {
                 val width = prefs.idleIslandWidth.first()
                 val style = prefs.idleIslandStyle.first()
                 dispatchDirect(context, width, style, force = force)
                 isShowing = true
-                Log.d(TAG, "Idle Island reasserted successfully with style: $style, width: $width")
+                Log.d(TAG, "Idle Island reasserted successfully with style: $style, width: $width (delay=${delayMs}ms)")
             }
         }
     }

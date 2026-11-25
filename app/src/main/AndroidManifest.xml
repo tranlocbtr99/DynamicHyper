@@ -95,6 +95,15 @@
             android:name=".feature.reply.InlineReplyService"
             android:exported="false" />
 
+        <!-- Invisible Activity for Island Tap -> Launches target app & restores Idle Island -->
+        <activity
+            android:name=".service.IslandTapActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- FileProvider for In-App OTA Update APK Installation -->
         <provider
             android:name="androidx.core.content.FileProvider"

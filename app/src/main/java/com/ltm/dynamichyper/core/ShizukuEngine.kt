@@ -27,6 +27,10 @@ object ShizukuEngine {
     private val notifyMutex = Mutex()
     private val postedActiveIds = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
 
+    fun clearPostedActiveId(id: Int) {
+        postedActiveIds.remove(id)
+    }
+
     fun isShizukuAvailable(): Boolean {
         return try {
             Shizuku.pingBinder()

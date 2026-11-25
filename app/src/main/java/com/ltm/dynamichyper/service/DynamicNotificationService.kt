@@ -60,8 +60,35 @@ class DynamicNotificationService : NotificationListenerService() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> {
-                    idleIslandManager.refresh()
+                    reconcileActiveIslandsAndRestoreIdle()
                 }
+            }
+        }
+    }
+
+    private val islandClickReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == IslandTapActivity.ACTION_ISLAND_CLICKED) {
+                val sbnKey = intent.getStringExtra(IslandTapActivity.EXTRA_SBN_KEY)
+                val islandId = intent.getIntExtra(IslandTapActivity.EXTRA_ISLAND_ID, -1)
+                Log.i(TAG, "Người dùng đã nhấn xem thông báo trên Đảo (key=$sbnKey, id=$islandId) -> Dọn đảo & khôi phục Đảo Chờ")
+
+                if (sbnKey != null) {
+                    activeDynamicIslands.remove(sbnKey)
+                    activeDismissJobs.remove(sbnKey)?.cancel()
+                    lastNotificationContent.remove(sbnKey)
+                    try {
+                        cancelNotification(sbnKey)
+                    } catch (_: Exception) {}
+                }
+                if (islandId != -1) {
+                    com.ltm.dynamichyper.core.ShizukuEngine.clearPostedActiveId(islandId)
+                    try {
+                        NotificationManagerCompat.from(this@DynamicNotificationService).cancel(islandId)
+                    } catch (_: Exception) {}
+                }
+                // Khôi phục Đảo Chờ 24/7 sau khi người dùng đã nhấn xem thông báo
+                idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
             }
         }
     }
@@ -89,6 +116,14 @@ class DynamicNotificationService : NotificationListenerService() {
             addAction(Intent.ACTION_SCREEN_ON)
         }
         registerReceiver(screenReceiver, filter)
+
+        val clickFilter = IntentFilter(IslandTapActivity.ACTION_ISLAND_CLICKED)
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            islandClickReceiver,
+            clickFilter,
+            androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -252,6 +287,7 @@ class DynamicNotificationService : NotificationListenerService() {
         lastNotificationContent.remove(sbn.key)
         if (dynamicIslandId != null) {
             activeDismissJobs.remove(sbn.key)?.cancel()
+            com.ltm.dynamichyper.core.ShizukuEngine.clearPostedActiveId(dynamicIslandId)
             try {
                 NotificationManagerCompat.from(this).cancel(dynamicIslandId)
             } catch (_: Exception) {}
@@ -259,22 +295,44 @@ class DynamicNotificationService : NotificationListenerService() {
             idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
         }
 
-        // Tự động kiểm tra đồng bộ: nếu người dùng bấm "Xóa tất cả" trên thanh thông báo
+        // Tự động đồng bộ lại danh sách đảo đang hoạt động (dọn sạch các key mồ côi khi người dùng bấm "Xóa tất cả")
         serviceScope.launch {
-            delay(180L)
-            val currentNotifs = try { activeNotifications } catch (_: Exception) { null }
-            val otherAppNotifsCount = currentNotifs?.count { it.packageName != packageName } ?: 0
-            if (otherAppNotifsCount == 0 || activeDynamicIslands.isEmpty()) {
-                activeDynamicIslands.values.forEach { id ->
+            delay(200L)
+            reconcileActiveIslandsAndRestoreIdle()
+        }
+    }
+
+    /**
+     * Đồng bộ hóa activeDynamicIslands với danh sách thông báo thực tế đang có trên thanh trạng thái.
+     * Nếu người dùng đã xóa hết thông báo hoặc thông báo gốc không còn tồn tại, lập tức dọn sạch và khôi phục Đảo Chờ!
+     */
+    private fun reconcileActiveIslandsAndRestoreIdle() {
+        try {
+            val currentNotifs = try { activeNotifications } catch (_: Exception) { null } ?: return
+            val liveKeys = currentNotifs.filter { it.packageName != packageName }.map { it.key }.toSet()
+
+            val iterator = activeDynamicIslands.entries.iterator()
+            while (iterator.hasNext()) {
+                val entry = iterator.next()
+                val key = entry.key
+                val islandId = entry.value
+                // Nếu thông báo gốc đã biến mất (và không phải do ta chủ động ẩn thông báo gốc)
+                if (!liveKeys.contains(key) && !intentionallyRemovedKeys.containsKey(key)) {
+                    iterator.remove()
+                    activeDismissJobs.remove(key)?.cancel()
+                    lastNotificationContent.remove(key)
+                    com.ltm.dynamichyper.core.ShizukuEngine.clearPostedActiveId(islandId)
                     try {
-                        NotificationManagerCompat.from(this@DynamicNotificationService).cancel(id)
+                        NotificationManagerCompat.from(this).cancel(islandId)
                     } catch (_: Exception) {}
                 }
-                activeDynamicIslands.clear()
-                activeDismissJobs.values.forEach { it.cancel() }
-                activeDismissJobs.clear()
+            }
+
+            if (activeDynamicIslands.isEmpty()) {
                 idleIslandManager.onEventCountChanged(0)
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "reconcileActiveIslands error: ${e.message}")
         }
     }
 
@@ -310,6 +368,23 @@ class DynamicNotificationService : NotificationListenerService() {
 
         val isMessaging = isMessagingApp(sbn)
         val isMedia = isMediaApp(sbn)
+
+        // Lọc bỏ các gói dịch vụ hệ thống chạy ngầm và thông báo ongoing không phải nhạc
+        // (ví dụ: android id=0, com.lbe.security.miui, com.huawei.health đếm bước chân, hoặc dịch vụ chat head id=1 của Messenger)
+        // để chúng không bao giờ chiếm giữ activeDynamicIslands làm mất Đảo Chờ!
+        val sysIgnoredPackages = setOf(
+            "android",
+            "com.android.systemui",
+            "com.lbe.security.miui",
+            "com.miui.securitycenter",
+            "com.xiaomi.xmsf",
+            "com.miui.screenshot"
+        )
+        if (sbn.packageName in sysIgnoredPackages) return
+        if (sbn.isOngoing && !isMedia) {
+            Log.d(TAG, "Bỏ qua thông báo chạy ngầm (ongoing non-media) từ ${sbn.packageName} (id=${sbn.id})")
+            return
+        }
 
         // Kiểm tra bộ lọc thông báo từng ứng dụng do người dùng cấu hình (Blacklist Model)
         val disabledApps = prefs.disabledPackages.first()
@@ -470,8 +545,20 @@ class DynamicNotificationService : NotificationListenerService() {
 
         paramV2.put("param_island", paramIsland)
 
-        // iconTextInfo
+        // baseInfo (type = 2) + iconTextInfo (kèm animIconInfo) theo đúng chuẩn MessageTranslator của HyperBridge:
+        // Đảm bảo FocusPlugin luôn tạo islandExpandedView đầy đủ để khi người dùng chạm lần 1 vào viên thuốc Đảo,
+        // Đảo sẽ bung to ra thẻ thông báo chi tiết kèm nút Trả lời nhanh / Sao chép OTP!
+        val baseInfo = JSONObject()
+        baseInfo.put("type", 2)
+        baseInfo.put("title", title)
+        baseInfo.put("content", text)
+        paramV2.put("baseInfo", baseInfo)
+
         val iconTextInfo = JSONObject()
+        val animIconInfo = JSONObject()
+        animIconInfo.put("type", 1)
+        animIconInfo.put("src", "miui.focus.pic_$picKey")
+        iconTextInfo.put("animIconInfo", animIconInfo)
         iconTextInfo.put("title", title)
         iconTextInfo.put("content", text)
         paramV2.put("iconTextInfo", iconTextInfo)
@@ -567,6 +654,23 @@ class DynamicNotificationService : NotificationListenerService() {
 
         val jsonParam = root.toString()
 
+        // Bọc contentIntent qua IslandTapActivity (chuẩn HyperBridge):
+        // Khi người dùng chạm vào thẻ Đảo đã bung để mở xem thông báo -> Mở app gốc, đồng thời
+        // đóng Đảo thông báo đó và tự động khôi phục lại Đảo Chờ 24/7!
+        val tapIntent = Intent(this, IslandTapActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION
+            putExtra(IslandTapActivity.EXTRA_SBN_KEY, sbn.key)
+            putExtra(IslandTapActivity.EXTRA_ISLAND_ID, dynamicIslandId)
+            putExtra(IslandTapActivity.EXTRA_ORIGINAL_INTENT, notif.contentIntent)
+            putExtra(IslandTapActivity.EXTRA_TARGET_PKG, sbn.packageName)
+        }
+        val wrappedContentIntent = android.app.PendingIntent.getActivity(
+            this,
+            dynamicIslandId,
+            tapIntent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification = FocusProtocolHelper.buildFocusNotification(
             context = this,
             title = title,
@@ -577,7 +681,7 @@ class DynamicNotificationService : NotificationListenerService() {
             isOngoing = isMedia,
             // Chỉ alert/bung ra khi là tin nhắn mới nhận diện lần đầu; các bản cập nhật sau chỉ cập nhật âm thầm
             onlyAlertOnce = !isNewMessage,
-            contentIntent = notif.contentIntent,
+            contentIntent = if (!isMedia) wrappedContentIntent else notif.contentIntent,
             actionsMap = actionsMap
         )
 
