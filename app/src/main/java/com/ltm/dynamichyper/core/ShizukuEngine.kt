@@ -204,24 +204,22 @@ object ShizukuEngine {
      */
     suspend fun postNotificationSafely(context: Context, id: Int, notification: Notification) {
         notifyMutex.withLock {
-            val pm = context.packageManager
-            val xmsfUid = try {
-                pm.getPackageUid("com.xiaomi.xmsf", 0)
-            } catch (_: Exception) {
-                null
-            }
-
             if (hasShizukuPermission()) {
                 try {
-                    // Áp dụng cô lập mạng XMSF toàn diện trước khi bắn thông báo
-                    applyXmsfBypass(context)
-                } catch (e: Throwable) {
-                    Log.w(TAG, "Lỗi khóa mạng XMSF trước khi notify: ${e.message}")
+                    // Tạm khóa mạng XMSF 50ms qua Shizuku UserService chuẩn HyperBridge để AuthManager pass -400
+                    XmsfNetworkHelper.setXmsfNetworkingEnabled(context, false)
+                    delay(50)
+                    NotificationManagerCompat.from(context).notify(id, notification)
+                    Log.d(TAG, "✓ Đã bắn Focus Notification thành công (id=$id)")
+                } finally {
+                    delay(100)
+                    // Tự động phục hồi mạng cho XMSF để dịch vụ đám mây Xiaomi hoạt động bình thường
+                    XmsfNetworkHelper.setXmsfNetworkingEnabled(context, true)
                 }
+            } else {
+                NotificationManagerCompat.from(context).notify(id, notification)
+                Log.d(TAG, "✓ Đã bắn Focus Notification (id=$id)")
             }
-
-            NotificationManagerCompat.from(context).notify(id, notification)
-            Log.d(TAG, "✓ Đã bắn Focus Notification thành công (id=$id)")
         }
     }
 }

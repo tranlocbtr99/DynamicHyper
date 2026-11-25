@@ -12,8 +12,8 @@ android {
         applicationId = "com.ltm.dynamichyper"
         minSdk = 33
         targetSdk = 37
-        versionCode = 45
-        versionName = "2.0.8-beta"
+        versionCode = 46
+        versionName = "2.0.9-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -44,6 +44,7 @@ android {
     buildFeatures {
         compose = true
         aidl = true
+        buildConfig = true
     }
 }
 

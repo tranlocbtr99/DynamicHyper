@@ -1,6 +1,10 @@
 # Proguard rules for Dynamic Hyper
 -keep class io.github.d4viddf.hyperisland_kit.** { *; }
 -keep class com.ltm.dynamichyper.** { *; }
+-keep interface com.ltm.dynamichyper.** { *; }
+-keep class com.ltm.dynamichyper.**$Stub { *; }
+-keep class com.ltm.dynamichyper.**$Proxy { *; }
+-keep class com.ltm.dynamichyper.core.PrivilegedServiceImpl { *; }
 -keep class com.google.gson.** { *; }
 -keep class dev.chrisbanes.haze.** { *; }
 -keep class rikka.shizuku.** { *; }

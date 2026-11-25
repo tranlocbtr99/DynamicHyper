@@ -537,7 +537,7 @@ private fun OverviewTabScreen(
             )
         }
 
-        // Card Hướng dẫn duy trì Đảo sau khi khởi động lại máy (Reboot Survival & XMSF Bypass)
+        // Card Tự Động Vượt Rào Xiaomi XMSF (Chuẩn HyperBridge)
         LiquidGlassCard(hazeState = hazeState) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -547,23 +547,23 @@ private fun OverviewTabScreen(
                     modifier = Modifier
                         .size(42.dp)
                         .clip(CircleShape)
-                        .background(AppleOrange.copy(alpha = 0.2f)),
+                        .background(AppleTeal.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Security,
+                        imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = AppleOrange
+                        tint = AppleTeal
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Duy Trì Đảo Sau Khởi Động Lại",
-                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AppleOrange)
+                        text = "Vượt Rào Xiaomi Tự Động",
+                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AppleTeal)
                     )
                     Text(
-                        text = "Giải pháp chặn lỗi -300 vĩnh viễn không cần Shizuku",
+                        text = "Công nghệ Shizuku Privileged UserService (Chuẩn HyperBridge)",
                         style = Typography.bodyMedium.copy(fontSize = 12.sp, color = TextSecondary)
                     )
                 }
@@ -572,49 +572,8 @@ private fun OverviewTabScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "💡 Khi khởi động lại máy, HyperOS sẽ tự động mở lại mạng cho Dịch vụ khung Xiaomi (XMSF) và Shizuku bị tắt. Xiaomi Cloud sẽ gửi mã lỗi -300 để chặn ứng dụng thứ 3 hiển thị Đảo. Hãy tắt vĩnh viễn mạng của XMSF để Đảo luôn hoạt động:",
+                text = "✨ Hệ thống đã tích hợp cơ chế tự động 100%: Ứng dụng tự động điều phối firewall của XMSF trong 50ms khi phát thông báo để SystemUI chấp nhận Đảo Tiêu Điểm, sau đó tự phục hồi mạng ngay lập tức. Bạn hoàn toàn không cần phải thao tác thủ công trong Cài đặt!",
                 style = Typography.bodySmall.copy(fontSize = 12.sp, color = TextPrimary)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color.Black.copy(alpha = 0.25f))
-                    .padding(10.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "1. Bấm nút dưới để mở trang Dịch vụ khung Xiaomi (XMSF).",
-                    style = Typography.bodySmall.copy(fontSize = 11.sp, color = TextSecondary)
-                )
-                Text(
-                    text = "2. Chọn 'Hạn chế sử dụng dữ liệu' -> BẮT BUỘC TẮT CẢ HAI: Wi-Fi VÀ Dữ liệu di động (Không để sót Wi-Fi) -> Nhấn OK.",
-                    style = Typography.bodySmall.copy(fontSize = 11.sp, color = TextSecondary)
-                )
-                Text(
-                    text = "3. Bấm 'Buộc dừng'. Xong! Đảo sẽ sống vĩnh viễn sau mọi lần tắt/bật lại máy.",
-                    style = Typography.bodySmall.copy(fontSize = 11.sp, color = TextSecondary)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            LiquidActionButton(
-                text = "MỞ CÀI ĐẶT DỊCH VỤ KHUNG XIAOMI (XMSF)",
-                onClick = {
-                    try {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                            data = Uri.parse("package:com.xiaomi.xmsf")
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(intent)
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Không thể mở trang cài đặt XMSF: ${e.message}", Toast.LENGTH_SHORT).show()
-                    }
-                }
             )
         }
 
