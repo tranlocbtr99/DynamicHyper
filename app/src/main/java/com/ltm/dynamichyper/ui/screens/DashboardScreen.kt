@@ -232,49 +232,51 @@ private fun OverviewTabScreen(
             islandMode = idleIslandMode
         )
 
-        // Hàng tinh gọn OTA & Ủng Hộ Tác Giả & Kiểm Lỗi Beta (Compact Multi-Bubble Row)
+        // Hàng điều khiển nhanh: Nhật Ký • Cập Nhật OTA • Ủng Hộ (Clean Unified Glass Bar)
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White.copy(alpha = 0.05f))
+                .border(0.5.dp, GlassBorderSubtle, RoundedCornerShape(18.dp))
+                .padding(horizontal = 6.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Nút Kiểm Lỗi Beta (Nhật ký sự kiện)
-            Box(
+            // Nút Kiểm Lỗi Beta (Nhật ký)
+            Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(AppleOrange.copy(alpha = 0.12f))
-                    .border(1.dp, AppleOrange.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+                    .clip(RoundedCornerShape(14.dp))
                     .clickable { showDiagnosticDialog = true }
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.BugReport,
-                        contentDescription = null,
-                        tint = AppleOrange,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Column {
-                        Text(
-                            text = "Nhật Ký Beta",
-                            style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = AppleOrange)
-                        )
-                        Text(
-                            text = "Kiểm lỗi thời gian thực",
-                            style = Typography.bodySmall.copy(fontSize = 10.sp, color = TextSecondary)
-                        )
-                    }
-                }
+                Icon(
+                    imageVector = Icons.Default.BugReport,
+                    contentDescription = null,
+                    tint = AppleOrange,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Nhật Ký",
+                    style = Typography.titleSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = TextPrimary)
+                )
             }
 
-            // Nút Cập nhật OTA
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(AppleBlue.copy(alpha = 0.12f))
-                    .border(1.dp, AppleBlue.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+                    .width(1.dp)
+                    .height(20.dp)
+                    .background(GlassBorderSubtle)
+            )
+
+            // Nút Cập nhật OTA
+            Row(
+                modifier = Modifier
+                    .weight(1.2f)
+                    .clip(RoundedCornerShape(14.dp))
                     .clickable {
                         scope.launch {
                             isCheckingUpdate = true
@@ -283,63 +285,63 @@ private fun OverviewTabScreen(
                             if (update != null && update.hasUpdate) {
                                 updateInfoState = update
                             } else {
-                                Toast.makeText(context, "Bạn đang dùng bản mới nhất (${OtaUpdateManager.getCurrentVersion(context)})!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Đang dùng bản mới nhất ($currentVersion)!", Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (isCheckingUpdate) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = AppleBlue
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.CloudSync,
-                            contentDescription = null,
-                            tint = AppleBlue,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Column {
-                        Text(
-                            text = "Cập Nhật OTA",
-                            style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = AppleBlue)
-                        )
-                        Text(
-                            text = currentVersion,
-                            style = Typography.bodySmall.copy(fontSize = 10.sp, color = TextSecondary)
-                        )
-                    }
+                if (isCheckingUpdate) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(14.dp),
+                        strokeWidth = 2.dp,
+                        color = AppleBlue
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.CloudSync,
+                        contentDescription = null,
+                        tint = AppleBlue,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "OTA $currentVersion",
+                    style = Typography.titleSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = AppleBlue)
+                )
             }
 
-            // Nút Ủng hộ (Donate)
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(AppleTeal.copy(alpha = 0.12f))
-                    .border(1.dp, AppleTeal.copy(alpha = 0.35f), RoundedCornerShape(18.dp))
+                    .width(1.dp)
+                    .height(20.dp)
+                    .background(GlassBorderSubtle)
+            )
+
+            // Nút Ủng hộ
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(14.dp))
                     .clickable { showDonateDialog = true }
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Favorite,
-                        contentDescription = null,
-                        tint = AppleTeal,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Ủng Hộ",
-                        style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold, fontSize = 12.sp, color = AppleTeal)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Favorite,
+                    contentDescription = null,
+                    tint = ApplePink,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Ủng Hộ",
+                    style = Typography.titleSmall.copy(fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = ApplePink)
+                )
             }
         }
 
@@ -1153,82 +1155,7 @@ private fun FeaturesTabScreen(
             }
         }
 
-        // ================= KHUNG TÍNH NĂNG NÂNG CAO (GOM VÀO 1 KHUNG DUY NHẤT) =================
-        LiquidGlassCard(hazeState = hazeState) {
-            Text(
-                text = "Đảo Mở Rộng Hệ Thống",
-                style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = ApplePink)
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 1. Đảo Quay Màn Hình
-            GlassSettingItem(
-                title = "Đảo Quay Màn Hình",
-                subtitle = "Hiển thị chấm đỏ nhấp nháy HyperOS & thời gian quay thực tế",
-                checked = isScreenRecordingEnabled,
-                onCheckedChange = { scope.launch { prefs.setScreenRecordingIslandEnabled(it) } }
-            )
-
-            HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
-
-            // 2. Đảo Trạng Thái VPN
-            GlassSettingItem(
-                title = "Đảo Trạng Thái VPN",
-                subtitle = "Báo kết nối bảo mật khi mở 1.1.1.1, WireGuard, v2ray...",
-                checked = isVpnEnabled,
-                onCheckedChange = { scope.launch { prefs.setVpnIslandEnabled(it) } }
-            )
-
-            HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
-
-            // 3. Màu Đảo Động Theo Bài Hát (Palette)
-            GlassSettingItem(
-                title = "Màu Đảo Động Theo Bài Hát",
-                subtitle = "Tự động đổi màu viền phát sáng theo bìa album đang nghe",
-                checked = isPaletteColorEnabled,
-                onCheckedChange = { scope.launch { prefs.setPaletteColorEnabled(it) } }
-            )
-
-            HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
-
-            // 4. Hiệu Ứng Sạc Pin & Cáp USB
-            GlassSettingItem(
-                title = "Hiệu Ứng Sạc Pin & Cáp USB",
-                subtitle = "Tự động bung đảo khi cắm sạc hiển thị phần trăm pin",
-                checked = isChargingEnabled,
-                onCheckedChange = { scope.launch { prefs.setChargingEnabled(it) } }
-            )
-
-            if (isChargingEnabled) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 12.dp, top = 4.dp, bottom = 4.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(Color.White.copy(alpha = 0.04f))
-                        .border(0.5.dp, GlassBorderSubtle, RoundedCornerShape(14.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    GlassSettingItem(
-                        title = "⚡ Công Suất Sạc (Watt)",
-                        subtitle = "Đo công suất W thời gian thực & cấp độ Turbo/HyperCharge",
-                        checked = isChargingWattageEnabled,
-                        onCheckedChange = { scope.launch { prefs.setChargingWattageEnabled(it) } }
-                    )
-
-                    HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
-
-                    GlassSettingItem(
-                        title = "⏱️ Thời Gian Sạc Đầy Pin",
-                        subtitle = "Ước tính thông minh thời gian nạp pin còn lại đến 100%",
-                        checked = isChargingTimeToFullEnabled,
-                        onCheckedChange = { scope.launch { prefs.setChargingTimeToFullEnabled(it) } }
-                    )
-                }
-            }
-        }
-
-        // ================= KHUNG ĐẢO CUỘC GỌI ĐẾN (CALL ISLAND & CHẶN BUNG MÀN HÌNH) =================
+        // ================= 1. ĐẢO CUỘC GỌI & CHỐNG CƯỚP MÀN HÌNH =================
         LiquidGlassCard(hazeState = hazeState) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1245,26 +1172,27 @@ private fun FeaturesTabScreen(
                         imageVector = Icons.Default.Call,
                         contentDescription = null,
                         tint = AppleGreen,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
                     Text(
-                        text = "Đảo Cuộc Gọi Đến Thông Minh",
-                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AppleGreen)
+                        text = "Cuộc Gọi Đến",
+                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AppleGreen, fontSize = 15.sp)
                     )
                     Text(
-                        text = "Zalo, Messenger, Telegram, Cuộc gọi SIM",
-                        style = Typography.bodyMedium.copy(fontSize = 11.sp, color = TextSecondary)
+                        text = "Zalo, Messenger, Telegram, SIM",
+                        style = Typography.bodySmall.copy(fontSize = 11.sp, color = TextSecondary)
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(10.dp))
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             GlassSettingItem(
-                title = "Hiển Thị Cuộc Gọi Trên Đảo",
-                subtitle = "Hiện tên, avatar, nút Nhận cuộc gọi hoặc Từ chối trực tiếp trên đảo.",
+                title = "Hiển thị cuộc gọi trên đảo",
+                subtitle = "Trả lời hoặc từ chối trực tiếp từ đảo nốt ruồi",
                 checked = isCallIslandEnabled,
                 onCheckedChange = { scope.launch { prefs.setCallIslandEnabled(it) } }
             )
@@ -1272,8 +1200,8 @@ private fun FeaturesTabScreen(
             HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
 
             GlassSettingItem(
-                title = "Chặn Bung Toàn Màn Hình Khi Gọi Đến",
-                subtitle = "Ngăn Zalo/Messenger cướp trọn màn hình đang dùng, đẩy cuộc gọi lên đảo (Yêu cầu Shizuku).",
+                title = "Chặn bung chiếm màn hình",
+                subtitle = "Đưa cuộc gọi lên đảo, không cướp full màn hình đang dùng (Shizuku)",
                 checked = isBlockFullscreenCall,
                 onCheckedChange = { checked ->
                     scope.launch {
@@ -1286,17 +1214,132 @@ private fun FeaturesTabScreen(
             )
         }
 
-        // ================= KHUNG SỰ KIỆN THÔNG BÁO CHÍNH =================
+        // ================= 2. ĐẢO HỆ THỐNG & TRẠNG THÁI =================
         LiquidGlassCard(hazeState = hazeState) {
-            Text(
-                text = "Sự Kiện Thông Báo & Chạy Nền",
-                style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AppleTeal)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(ApplePink.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Widgets,
+                        contentDescription = null,
+                        tint = ApplePink,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "Đảo Mở Rộng Hệ Thống",
+                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = ApplePink, fontSize = 15.sp)
+                    )
+                    Text(
+                        text = "Quay màn hình, VPN, hiệu ứng sạc pin",
+                        style = Typography.bodySmall.copy(fontSize = 11.sp, color = TextSecondary)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            GlassSettingItem(
+                title = "Đảo Quay Màn Hình",
+                subtitle = "Chấm đỏ nhấp nháy & thời gian quay thực tế của HyperOS",
+                checked = isScreenRecordingEnabled,
+                onCheckedChange = { scope.launch { prefs.setScreenRecordingIslandEnabled(it) } }
             )
-            Spacer(modifier = Modifier.height(10.dp))
+
+            HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
+
+            GlassSettingItem(
+                title = "Đảo Trạng Thái VPN",
+                subtitle = "Biểu tượng ổ khóa bảo mật khi kết nối 1.1.1.1, VPN",
+                checked = isVpnEnabled,
+                onCheckedChange = { scope.launch { prefs.setVpnIslandEnabled(it) } }
+            )
+
+            HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
+
+            GlassSettingItem(
+                title = "Hiệu Ứng Cắm Sạc Pin",
+                subtitle = "Bung đảo hiển thị phần trăm pin và công suất sạc",
+                checked = isChargingEnabled,
+                onCheckedChange = { scope.launch { prefs.setChargingEnabled(it) } }
+            )
+
+            if (isChargingEnabled) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, top = 4.dp, bottom = 4.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White.copy(alpha = 0.03f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    GlassSettingItem(
+                        title = "⚡ Công Suất Sạc (Watt)",
+                        subtitle = "Đo công suất W & cấp độ sạc nhanh thời gian thực",
+                        checked = isChargingWattageEnabled,
+                        onCheckedChange = { scope.launch { prefs.setChargingWattageEnabled(it) } }
+                    )
+
+                    HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
+
+                    GlassSettingItem(
+                        title = "⏱️ Ước Tính Thời Gian Sạc Đầy",
+                        subtitle = "Hiển thị số phút nạp pin còn lại đến 100%",
+                        checked = isChargingTimeToFullEnabled,
+                        onCheckedChange = { scope.launch { prefs.setChargingTimeToFullEnabled(it) } }
+                    )
+                }
+            }
+        }
+
+        // ================= 3. TRÌNH PHÁT NHẠC & CHẠY NỀN =================
+        LiquidGlassCard(hazeState = hazeState) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(AppleTeal.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MusicNote,
+                        contentDescription = null,
+                        tint = AppleTeal,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "Âm Nhạc & Chạy Nền",
+                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AppleTeal, fontSize = 15.sp)
+                    )
+                    Text(
+                        text = "Spotify, Apple Music, Zing MP3, duy trì dịch vụ",
+                        style = Typography.bodySmall.copy(fontSize = 11.sp, color = TextSecondary)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             GlassSettingItem(
                 title = "Trình Phát Nhạc Động",
-                subtitle = "Spotify, Apple Music, Zing MP3, YouTube Music...",
+                subtitle = "Hiển thị đảo đĩa xoay và thanh sóng âm nhạc",
                 checked = isMusicEnabled,
                 onCheckedChange = { scope.launch { prefs.setMusicEnabled(it) } }
             )
@@ -1304,59 +1347,20 @@ private fun FeaturesTabScreen(
             HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
 
             GlassSettingItem(
-                title = "Tin Nhắn Zalo & Messenger",
-                subtitle = "Hiển thị đảo tức thì khi có thông báo tin nhắn mới",
-                checked = isChatEnabled,
-                onCheckedChange = { scope.launch { prefs.setChatEnabled(it) } }
+                title = "Màu Đảo Theo Bìa Nhạc (Palette)",
+                subtitle = "Tự động đổi màu viền phát sáng neon theo bài hát đang nghe",
+                checked = isPaletteColorEnabled,
+                onCheckedChange = { scope.launch { prefs.setPaletteColorEnabled(it) } }
             )
 
             HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
 
             GlassSettingItem(
                 title = "Bất Tử Khi Xóa Đa Nhiệm",
-                subtitle = "Không bị tắt đảo khi bấm nút xóa tất cả đa nhiệm",
+                subtitle = "Bảo vệ Đảo Chờ không bị tắt khi bấm nút xóa tất cả đa nhiệm",
                 checked = isPersistentMode,
                 onCheckedChange = { scope.launch { prefs.setPersistentMode(it) } }
             )
-        }
-
-        // Minh họa 4 cấp độ sạc phần cứng
-        LiquidGlassCard(hazeState = hazeState) {
-            Text(
-                text = "Cấp Độ Sạc Neon Tự Động",
-                style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ChargingTierBadge(
-                    name = "HyperCharge",
-                    wattage = ">65W",
-                    color = Color(0xFFFF3B30),
-                    modifier = Modifier.weight(1f)
-                )
-                ChargingTierBadge(
-                    name = "Turbo Charge",
-                    wattage = "30-65W",
-                    color = Color(0xFFFF9F0A),
-                    modifier = Modifier.weight(1f)
-                )
-                ChargingTierBadge(
-                    name = "Fast Charge",
-                    wattage = "15-30W",
-                    color = Color(0xFF30D158),
-                    modifier = Modifier.weight(1f)
-                )
-                ChargingTierBadge(
-                    name = "Standard",
-                    wattage = "<15W",
-                    color = Color(0xFF34C759),
-                    modifier = Modifier.weight(1f)
-                )
-            }
         }
 
         // ================= DIALOGS =================
