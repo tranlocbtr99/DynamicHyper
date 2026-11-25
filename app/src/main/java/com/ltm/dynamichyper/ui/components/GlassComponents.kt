@@ -237,6 +237,8 @@ fun GlassSettingItem(
     icon: ImageVector? = null,
     modifier: Modifier = Modifier
 ) {
+    var showInfoDialog by remember { mutableStateOf(false) }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -244,20 +246,65 @@ fun GlassSettingItem(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 text = title,
-                style = Typography.titleMedium.copy(fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                style = Typography.titleMedium.copy(fontWeight = FontWeight.SemiBold, color = TextPrimary),
+                modifier = Modifier.weight(1f, fill = false)
             )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = subtitle,
-                style = Typography.bodyMedium.copy(color = TextSecondary)
-            )
+            if (subtitle.isNotBlank()) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .border(0.8.dp, GlassBorderSubtle, CircleShape)
+                        .clickable { showInfoDialog = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "?",
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
         CupertinoSwitch(
             checked = checked,
             onCheckedChange = onCheckedChange
+        )
+    }
+
+    if (showInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showInfoDialog = false },
+            containerColor = Color(0xFF141824),
+            shape = RoundedCornerShape(22.dp),
+            title = {
+                Text(
+                    text = title,
+                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = TextPrimary)
+                )
+            },
+            text = {
+                Text(
+                    text = subtitle,
+                    style = Typography.bodyMedium.copy(color = TextSecondary, lineHeight = 20.sp)
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showInfoDialog = false }) {
+                    Text("Đã hiểu", color = AppleTeal, fontWeight = FontWeight.SemiBold)
+                }
+            }
         )
     }
 }

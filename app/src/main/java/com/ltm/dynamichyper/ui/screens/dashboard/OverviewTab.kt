@@ -446,11 +446,11 @@ internal fun OverviewTabScreen(
                     Text(
                         text = when {
                             isAllReady && !isShizukuReady && isOneTimeActivated ->
-                                "Đã khóa XMSF 1 lần • Hoạt động ngay cả khi tắt Shizuku & Wireless Debugging"
+                                "XMSF đã khóa • Tự chạy khi tắt Shizuku"
                             isAllReady ->
-                                "Đã khóa XMSF vĩnh viễn • Có thể tắt Wireless Debugging & Shizuku"
+                                "XMSF đã khóa vĩnh viễn • Có thể tắt Shizuku"
                             else ->
-                                "Cấp Shizuku 1 lần để khóa XMSF, sau đó có thể tắt Wireless Debugging"
+                                "Cần cấp Shizuku 1 lần để khóa XMSF"
                         },
                         style = Typography.bodyMedium.copy(fontSize = 12.sp, color = if (isAllReady) AppleTeal else TextSecondary)
                     )
@@ -459,9 +459,9 @@ internal fun OverviewTabScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Nút Thử Đảo Nổi Bật Chính
+            // Nút Bật Đảo Chính
             LiquidActionButton(
-                text = "⚡ TEST BẮN ĐẢO NGAY (BUNG ĐẢO TRỰC QUAN)",
+                text = "⚡ BẬT ĐẢO",
                 onClick = {
                     if (ShizukuEngine.isShizukuAvailable() && ShizukuEngine.hasShizukuPermission()) {
                         ShizukuEngine.applyXmsfBypass(context)
@@ -470,7 +470,7 @@ internal fun OverviewTabScreen(
                     IdleIslandManager.resetCache()
                     IdleIslandManager.showIdleIsland(context, idleIslandWidth, force = true)
                     FocusProtocolHelper.sendVisualTestIsland(context)
-                    Toast.makeText(context, "Đang bung Đảo Động Test lên camera notch (4s)...", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Đang bật Đảo Động...", Toast.LENGTH_SHORT).show()
                 }
             )
 
