@@ -74,6 +74,13 @@ class IdleIslandManager(
 
         fun dispatchDirect(context: Context, width: Int, style: String = "minimal", force: Boolean = false) {
             try {
+                // Kiểm tra xem có ứng dụng hệ thống nào đang phát native island không (Yield Check)
+                if (com.ltm.dynamichyper.core.NativeIslandTracker.hasFresh()) {
+                    val remaining = com.ltm.dynamichyper.core.NativeIslandTracker.remainingYieldMs()
+                    Log.d(TAG, "Tạm hoãn Đảo Chờ: Đang nhường chỗ cho native island hệ thống (${remaining}ms)")
+                    return
+                }
+
                 val effectiveWidth = if (width > 0) width else 8
                 val emptyString = "\u00A0".repeat(effectiveWidth)
 

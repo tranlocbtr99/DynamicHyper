@@ -98,19 +98,49 @@ class DynamicNotificationService : NotificationListenerService() {
     override fun onListenerConnected() {
         super.onListenerConnected()
         Log.i(TAG, "NotificationListener Connected successfully")
+        com.ltm.dynamichyper.core.ListenerWatchdog.isListenerConnected = true
+        com.ltm.dynamichyper.core.ListenerWatchdog.start(this, serviceScope)
         idleIslandManager.isShowing = false
         IdleIslandManager.resetCache()
         idleIslandManager.reassert(force = true)
+    }
+
+    override fun onListenerDisconnected() {
+        super.onListenerDisconnected()
+        Log.w(TAG, "NotificationListener Disconnected!")
+        com.ltm.dynamichyper.core.ListenerWatchdog.isListenerConnected = false
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
         if (sbn.packageName == packageName) return
         com.ltm.dynamichyper.core.AppLogger.d(TAG, "Bắt thông báo từ gói: ${sbn.packageName} (id=${sbn.id})")
-        // Không xử lý lại các thông báo đã là Xiaomi Focus Island để tránh đệ quy
-        if (sbn.notification.extras?.containsKey("miui.focus.param") == true) return
+        // Không xử lý lại các thông báo đã là Xiaomi Focus Island để tránh đệ quy,
+        // nhưng ghi nhận vào NativeIslandTracker để nhường chỗ (Yield Policy)
+        val focusParam = sbn.notification.extras?.getString("miui.focus.param")
+        if (focusParam != null) {
+            val yieldMs = com.ltm.dynamichyper.core.NativeIslandTracker.calculateYieldMs(
+                hasFocusParam = true,
+                focusParam = focusParam,
+                isMediaPlayer = sbn.notification.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true
+            )
+            if (yieldMs != null) {
+                com.ltm.dynamichyper.core.NativeIslandTracker.note(sbn.key, yieldMs)
+                idleIslandManager.onEventCountChanged(activeDynamicIslands.size + 1)
+            }
+            return
+        }
 
-        // 1. Nhận diện Cuộc Gọi Đến (Zalo, Messenger, Telegram, Phone...)
+        // 1. Nhận diện Chỉ Đường Bản Đồ (Google Maps, Waze, Here WeGo)
+        if (com.ltm.dynamichyper.feature.islands.NavigationIslandManager.isNavNotification(sbn)) {
+            val title = sbn.notification.extras?.getString(Notification.EXTRA_TITLE) ?: ""
+            val content = sbn.notification.extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+            com.ltm.dynamichyper.feature.islands.NavigationIslandManager.showNavIsland(this, title, content)
+            idleIslandManager.onEventCountChanged(activeDynamicIslands.size + 1)
+            return
+        }
+
+        // 2. Nhận diện Cuộc Gọi Đến (Zalo, Messenger, Telegram, Phone...)
         if (CallIslandManager.isCallNotification(sbn)) {
             Log.i(TAG, "Incoming call detected from ${sbn.packageName}")
             callIslandManager.handleCallNotification(sbn)
@@ -169,7 +199,9 @@ class DynamicNotificationService : NotificationListenerService() {
                 }
                 ChargingIslandManager.CHARGING_NOTIFICATION_ID,
                 ScreenRecordingIslandManager.RECORDING_NOTIFICATION_ID,
-                VpnIslandManager.VPN_NOTIFICATION_ID -> {
+                VpnIslandManager.VPN_NOTIFICATION_ID,
+                com.ltm.dynamichyper.feature.islands.NavigationIslandManager.NAV_ISLAND_ID,
+                com.ltm.dynamichyper.feature.islands.DebuggingIslandManager.DEBUGGING_ISLAND_ID -> {
                     Log.i(TAG, "Feature island ${sbn.id} ended. Returning to Idle Island...")
                     serviceScope.launch {
                         delay(150L)
@@ -189,6 +221,15 @@ class DynamicNotificationService : NotificationListenerService() {
                 }
             }
             return
+        }
+
+        if (com.ltm.dynamichyper.core.NativeIslandTracker.remove(sbn.key)) {
+            Log.d(TAG, "Native island ${sbn.key} đã kết thúc, kiểm tra khôi phục Đảo Chờ")
+            idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
+        }
+
+        if (com.ltm.dynamichyper.feature.islands.NavigationIslandManager.isNavNotification(sbn)) {
+            com.ltm.dynamichyper.feature.islands.NavigationIslandManager.hideNavIsland(this)
         }
 
         if (CallIslandManager.isCallNotification(sbn) || callIslandManager.isCallActive) {
@@ -435,9 +476,35 @@ class DynamicNotificationService : NotificationListenerService() {
         iconTextInfo.put("content", text)
         paramV2.put("iconTextInfo", iconTextInfo)
 
-        // 2. Tương tác trên đảo: Trích xuất Actions & Tạo nút Trả Lời Nhanh (Inline Quick Reply)
+        // 2. Tương tác trên đảo: Trích xuất Actions & Tạo nút Trả Lời Nhanh / Sao chép OTP
         val actionsMap = mutableMapOf<String, Any>()
         val textButtonsArray = org.json.JSONArray()
+
+        // 2.1 Kiểm tra OTP thông minh (Smart Actions OTP)
+        val otpCode = com.ltm.dynamichyper.core.SmartActionsExtractor.findOtpCode("$title $text")
+        if (otpCode != null) {
+            val copyIntent = Intent(this, com.ltm.dynamichyper.core.OtpCopyReceiver::class.java).apply {
+                action = "com.ltm.dynamichyper.ACTION_COPY_OTP"
+                putExtra("otp_code", otpCode)
+            }
+            val copyPendingIntent = android.app.PendingIntent.getBroadcast(
+                this,
+                otpCode.hashCode(),
+                copyIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            val actionKey = "miui.focus.action_copy_otp"
+            actionsMap[actionKey] = copyPendingIntent
+
+            val btnObj = JSONObject()
+            btnObj.put("type", 1)
+            btnObj.put("actionTitle", "Sao chép $otpCode")
+            btnObj.put("action", actionKey)
+            btnObj.put("actionIntent", actionKey)
+            btnObj.put("actionIntentType", 1)
+            btnObj.put("actionTitleColor", "#30D158")
+            textButtonsArray.put(btnObj)
+        }
 
         val rawActions = notif.actions
         if (rawActions != null && rawActions.isNotEmpty()) {

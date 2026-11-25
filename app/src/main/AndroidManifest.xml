@@ -83,6 +83,14 @@
             android:name=".feature.reply.InlineReplyReceiver"
             android:exported="true" />
 
+        <receiver
+            android:name=".core.OtpCopyReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.ltm.dynamichyper.ACTION_COPY_OTP" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".feature.reply.InlineReplyService"
             android:exported="false" />
