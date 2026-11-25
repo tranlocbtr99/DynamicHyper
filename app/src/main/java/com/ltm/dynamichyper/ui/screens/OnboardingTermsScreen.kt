@@ -119,46 +119,45 @@ fun OnboardingTermsScreen(
                         .verticalScroll(scrollState)
                 ) {
                     Text(
-                        text = "1. Tuyên Bố Miễn Trừ Trách Nhiệm (Disclaimer):",
+                        text = "1. Phạm Vi & Tuyên Bố Miễn Trừ Trách Nhiệm (Disclaimer):",
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "• Dynamic Hyper sử dụng giao thức Focus Notification (Thông báo trọng tâm) chính thức của Xiaomi HyperOS để tạo hiệu ứng đảo động.\n" +
-                               "• Ứng dụng hoạt động an toàn, không can thiệp vào kernel hay làm hỏng thiết bị.\n" +
-                               "• Tác giả không chịu trách nhiệm đối với các xung đột hệ thống do người dùng cài đặt các bản ROM chỉnh sửa không chính thức.",
+                        text = "• Ứng dụng hoạt động dựa trên giao thức Focus Notification của Xiaomi HyperOS và quyền do bạn tự nguyện cấp; KHÔNG can thiệp kernel hay root.\n" +
+                               "• Phần mềm được cung cấp theo nguyên trạng (\"AS IS\"). Tác giả được miễn trừ mọi trách nhiệm đối với xung đột hệ thống do ROM tùy biến hoặc thay đổi API từ nhà sản xuất.",
                         style = Typography.bodyMedium.copy(fontSize = 13.sp, color = TextSecondary, lineHeight = 20.sp)
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = "2. Quyền Riêng Tư & An Toàn Dữ Liệu:",
+                        text = "2. Quyền Riêng Tư & Xử Lý Cục Bộ:",
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "• Cam kết 100% KHÔNG thu thập, lưu trữ hay tải lên bất kỳ thông tin tin nhắn, hình ảnh hay danh bạ của bạn.\n" +
-                               "• Quyền truy cập thông báo chỉ được dùng cục bộ trên thiết bị để bắt bài hát và tin nhắn Zalo/Messenger hiển thị lên đảo động.",
+                        text = "• Cam kết 100% KHÔNG thu thập, lưu trữ máy chủ hay chia sẻ bất kỳ nội dung tin nhắn, cuộc gọi, OTP hay danh bạ nào của bạn.\n" +
+                               "• Quyền truy cập thông báo chỉ được xử lý cục bộ trên thiết bị để hiển thị đảo động.",
                         style = Typography.bodyMedium.copy(fontSize = 13.sp, color = TextSecondary, lineHeight = 20.sp)
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
 
                     Text(
-                        text = "3. Bản Quyền & Tác Giả:",
+                        text = "3. Tuyên Bố Bản Quyền & Sở Hữu Trí Tuệ:",
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         fontSize = 14.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "• Phát triển bởi: Tran Minh Loc (LTM)\n" +
-                               "• Nghiêm cấm mọi hành vi đóng gói lại mã nguồn để thương mại hóa hoặc trục lợi bất chính.",
+                        text = "• Copyright © 2026 Trần Minh Lộc (tranlocbtr99@gmail.com). Bảo lưu mọi quyền (All Rights Reserved).\n" +
+                               "• Nghiêm cấm tuyệt đối mọi hành vi sao chép, trích xuất mã nguồn, dịch ngược (decompile), đóng gói lại hoặc thương mại hóa trái phép.",
                         style = Typography.bodyMedium.copy(fontSize = 13.sp, color = TextSecondary, lineHeight = 20.sp)
                     )
                 }

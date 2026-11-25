@@ -109,47 +109,48 @@ fun TermsAndDisclaimerDialog(
                         .padding(14.dp)
                 ) {
                     Text(
-                        text = "1. Tuyên Bố Miễn Trừ Trách Nhiệm (Disclaimer):",
+                        text = "1. Phạm Vi & Tuyên Bố Miễn Trừ Trách Nhiệm (Disclaimer):",
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         fontSize = 13.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "• Ứng dụng Dynamic Hyper hoạt động dựa trên cơ chế thông báo trọng tâm (Focus Notification) tích hợp sẵn của Xiaomi HyperOS.\n" +
-                               "• Ứng dụng hoàn toàn KHÔNG can thiệp sâu vào kernel hay làm hỏng phần cứng thiết bị của bạn.\n" +
-                               "• Tác giả không chịu trách nhiệm trong các trường hợp xung đột giao diện do người dùng sử dụng các bản ROM tùy biến không chính thức.",
-                        style = Typography.bodyMedium.copy(fontSize = 12.sp, color = TextSecondary)
+                        text = "• Dynamic Hyper hoạt động dựa trên giao thức thông báo trọng tâm (Focus Notification) của Xiaomi HyperOS và các quyền do người dùng tự nguyện cấp; ứng dụng KHÔNG can thiệp kernel và KHÔNG yêu cầu root.\n" +
+                               "• Phần mềm được cung cấp theo nguyên trạng (\"AS IS\"), không cam kết tương thích tuyệt đối với mọi phiên bản ROM tùy biến hoặc các thay đổi API hệ thống từ Xiaomi trong tương lai.\n" +
+                               "• Tác giả được miễn trừ mọi trách nhiệm pháp lý và bồi thường đối với các sự cố xung đột giao diện, hao hụt pin, gián đoạn thông báo hoặc thiệt hại phát sinh từ việc sử dụng sai mục đích hoặc trên ROM không chính thức.",
+                        style = Typography.bodyMedium.copy(fontSize = 12.sp, color = TextSecondary, lineHeight = 18.sp)
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = "2. Quyền Riêng Tư & Bảo Mật:",
+                        text = "2. Quyền Riêng Tư & Xử Lý Dữ Liệu Cục Bộ:",
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         fontSize = 13.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "• Dynamic Hyper cam kết 100% KHÔNG thu thập, lưu trữ hay tải lên máy chủ bất kỳ nội dung tin nhắn, danh bạ, hay dữ liệu cá nhân nào.\n" +
-                               "• Quyền truy cập thông báo chỉ được sử dụng cục bộ trên máy để hiển thị hiệu ứng đảo động cho trình phát nhạc và tin nhắn.",
-                        style = Typography.bodyMedium.copy(fontSize = 12.sp, color = TextSecondary)
+                        text = "• Cam kết 100% KHÔNG thu thập, lưu trữ máy chủ hay chia sẻ cho bên thứ ba bất kỳ nội dung tin nhắn, cuộc gọi, danh bạ, mã OTP hay dữ liệu cá nhân nào.\n" +
+                               "• Mọi xử lý đọc thông báo và hiển thị đảo động diễn ra hoàn toàn cục bộ trên thiết bị. Kết nối mạng chỉ dùng để kiểm tra cập nhật OTA (GitHub) và lấy dữ liệu thời tiết công khai khi bạn bật widget thời tiết.",
+                        style = Typography.bodyMedium.copy(fontSize = 12.sp, color = TextSecondary, lineHeight = 18.sp)
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = "3. Bản Quyền & Tác Giả:",
+                        text = "3. Tuyên Bố Bản Quyền & Sở Hữu Trí Tuệ Độc Quyền:",
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
                         fontSize = 13.sp
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "• Dự án được phát triển và tối ưu bởi LTM (Trần Lộc).\n" +
-                               "• Nghiêm cấm mọi hành vi đóng gói lại để thương mại hóa hoặc lừa đảo người dùng.",
-                        style = Typography.bodyMedium.copy(fontSize = 12.sp, color = TextSecondary)
+                        text = "• Copyright © 2026 Trần Minh Lộc (tranlocbtr99@gmail.com). Bảo lưu mọi quyền (All Rights Reserved).\n" +
+                               "• Toàn bộ mã nguồn, thuật toán điều khiển đảo động, tài nguyên đồ họa và giao diện Kính Lỏng (Liquid Glass UI) là tài sản trí tuệ độc quyền của tác giả.\n" +
+                               "• Nghiêm cấm tuyệt đối mọi hành vi sao chép, trích xuất, dịch ngược (reverse engineering / decompile), chỉnh sửa, đóng gói lại, phân phối lại hoặc thương mại hóa dưới bất kỳ hình thức nào nếu không có văn bản chấp thuận từ tác giả.",
+                        style = Typography.bodyMedium.copy(fontSize = 12.sp, color = TextSecondary, lineHeight = 18.sp)
                     )
                 }
 

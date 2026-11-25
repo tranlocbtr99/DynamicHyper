@@ -933,9 +933,9 @@ internal fun OverviewTabScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "• Thiết kế & Phát triển: Tran Minh Loc (LTM)\n" +
-                        "• Kiến trúc: HyperIsland Core Protocol & Shizuku Privileged Engine\n" +
-                        "• Tương thích: Toàn bộ thiết bị Xiaomi, Redmi, POCO (HyperOS 1, 2, 3)",
+                text = "Copyright © 2026 Trần Minh Lộc (tranlocbtr99@gmail.com). Bảo lưu mọi quyền (All Rights Reserved).\n" +
+                        "• Phần mềm độc quyền — Nghiêm cấm sao chép, trích xuất, dịch ngược hoặc thương mại hóa trái phép.\n" +
+                        "• Tương thích: Xiaomi, Redmi, POCO (HyperOS 1, 2, 3, 4)",
                 style = Typography.bodyMedium.copy(fontSize = 12.sp, color = TextSecondary, lineHeight = 20.sp)
             )
 
