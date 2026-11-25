@@ -25,7 +25,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var prefs: PreferencesManager
 
     private val binderReceivedListener = Shizuku.OnBinderReceivedListener {
-        if (ShizukuEngine.hasShizukuPermission()) {
+        if (!ShizukuEngine.hasShizukuPermission()) {
+            ShizukuEngine.requestShizukuPermission()
+        } else {
             ShizukuEngine.applyOneTouchOptimizations(this)
         }
     }
@@ -54,11 +56,15 @@ class MainActivity : ComponentActivity() {
             Shizuku.addRequestPermissionResultListener(requestPermissionResultListener)
         } catch (_: Throwable) {}
 
-        // Kiểm tra và tự động áp dụng quyền Shizuku 10020 & 10008 ngay khi mở app
-        if (ShizukuEngine.hasShizukuPermission()) {
-            CoroutineScope(Dispatchers.IO).launch {
-                ShizukuEngine.applyOneTouchOptimizations(this@MainActivity)
-                com.ltm.dynamichyper.core.AppLogger.i("MainActivity", "Tự động áp dụng tối ưu hóa Shizuku & cấp Op 10020 thành công")
+        // Kiểm tra và tự động yêu cầu hoặc áp dụng quyền Shizuku ngay khi mở app
+        if (ShizukuEngine.isShizukuAvailable()) {
+            if (!ShizukuEngine.hasShizukuPermission()) {
+                ShizukuEngine.requestShizukuPermission()
+            } else {
+                CoroutineScope(Dispatchers.IO).launch {
+                    ShizukuEngine.applyOneTouchOptimizations(this@MainActivity)
+                    com.ltm.dynamichyper.core.AppLogger.i("MainActivity", "Tự động áp dụng tối ưu hóa Shizuku & cấp Op 10020 thành công")
+                }
             }
         }
 
@@ -105,6 +111,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (ShizukuEngine.isShizukuAvailable() && !ShizukuEngine.hasShizukuPermission()) {
+            ShizukuEngine.requestShizukuPermission()
+        }
         // Khởi động KeepAliveService một cách an toàn khi Activity đã ở Foreground
         try {
             val serviceIntent = android.content.Intent(this, com.ltm.dynamichyper.service.KeepAliveService::class.java)

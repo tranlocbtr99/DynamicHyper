@@ -150,24 +150,18 @@ object ShizukuEngine {
                 AppLogger.w(TAG, "ShizukuHook IPC thất bại, tiếp tục shell fallback: ${e.message}")
             }
 
-            // 2. Shell fallback: netpolicy blacklist + connectivity chain3 + appops
+            // 2. Shell fallback: netpolicy blacklist + connectivity chain3 + appops + force-stop
+            val (c1, o1) = execCommand("cmd connectivity set-chain3-enabled true")
+            val (c2, o2) = execCommand("cmd connectivity set-package-networking-enabled false com.xiaomi.xmsf")
             val (cNet, outNet) = execCommand("cmd netpolicy add restrict-background-blacklist $xmsfUid")
-            if (cNet == 0) {
-                AppLogger.i(TAG, "✓ Đã áp dụng XMSF Bypass qua cmd netpolicy blacklist (uid=$xmsfUid)")
-                anySuccess = true
-            }
-
-            val (c1, _) = execCommand("cmd connectivity set-chain3-enabled true")
-            if (c1 == 0) {
-                val (c2, _) = execCommand("cmd connectivity set-package-networking-enabled false com.xiaomi.xmsf")
-                if (c2 == 0) {
-                    AppLogger.i(TAG, "✓ Đã áp dụng XMSF Bypass qua cmd connectivity chain3")
-                    anySuccess = true
-                }
-            }
-
             execCommand("cmd appops set com.xiaomi.xmsf RUN_IN_BACKGROUND ignore")
             execCommand("cmd appops set com.xiaomi.xmsf RUN_ANY_IN_BACKGROUND ignore")
+            execCommand("am force-stop com.xiaomi.xmsf")
+
+            if (c1 == 0 || c2 == 0 || cNet == 0) {
+                AppLogger.i(TAG, "✓ Đã áp dụng XMSF Bypass qua Shell thành công (uid=$xmsfUid)")
+                anySuccess = true
+            }
 
             return anySuccess
         } catch (e: Throwable) {
@@ -217,10 +211,10 @@ object ShizukuEngine {
                 null
             }
 
-            if (hasShizukuPermission() && xmsfUid != null) {
+            if (hasShizukuPermission()) {
                 try {
-                    // Đảm bảo mạng của XMSF luôn bị khóa, không phục hồi mạng
-                    ShizukuHook.setPackageNetworkingEnabled(xmsfUid, false)
+                    // Áp dụng cô lập mạng XMSF toàn diện trước khi bắn thông báo
+                    applyXmsfBypass(context)
                 } catch (e: Throwable) {
                     Log.w(TAG, "Lỗi khóa mạng XMSF trước khi notify: ${e.message}")
                 }

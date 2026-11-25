@@ -522,6 +522,13 @@ private fun OverviewTabScreen(
             LiquidActionButton(
                 text = "⚡ TEST BẮN ĐẢO NGAY (BUNG ĐẢO TRỰC QUAN)",
                 onClick = {
+                    if (ShizukuEngine.isShizukuAvailable()) {
+                        if (!ShizukuEngine.hasShizukuPermission()) {
+                            ShizukuEngine.requestShizukuPermission()
+                        } else {
+                            ShizukuEngine.applyXmsfBypass(context)
+                        }
+                    }
                     IdleIslandManager.resetCache()
                     IdleIslandManager.showIdleIsland(context, idleIslandWidth, force = true)
                     FocusProtocolHelper.sendVisualTestIsland(context)
@@ -584,7 +591,7 @@ private fun OverviewTabScreen(
                     style = Typography.bodySmall.copy(fontSize = 11.sp, color = TextSecondary)
                 )
                 Text(
-                    text = "2. Chọn 'Hạn chế sử dụng dữ liệu' -> TẮT CẢ Wi-Fi và Dữ liệu di động -> Nhấn OK.",
+                    text = "2. Chọn 'Hạn chế sử dụng dữ liệu' -> BẮT BUỘC TẮT CẢ HAI: Wi-Fi VÀ Dữ liệu di động (Không để sót Wi-Fi) -> Nhấn OK.",
                     style = Typography.bodySmall.copy(fontSize = 11.sp, color = TextSecondary)
                 )
                 Text(
