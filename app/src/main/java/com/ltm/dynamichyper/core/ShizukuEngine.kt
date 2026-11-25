@@ -81,22 +81,14 @@ object ShizukuEngine {
      */
     fun applyOneTouchOptimizations(context: Context): Boolean {
         val packageName = context.packageName
-        val currentProtocol = try {
-            android.provider.Settings.System.getInt(context.contentResolver, "notification_focus_protocol", 0)
-        } catch (_: Throwable) { 0 }
-
-        val protocolCmd = if (currentProtocol < 2) {
-            listOf("settings put system notification_focus_protocol 2")
-        } else {
-            emptyList()
-        }
+        val targetProtocol = FocusProtocolHelper.getFocusProtocolVersion(context)
 
         val commands = listOf(
             "cmd notification allow_listener $packageName/com.ltm.dynamichyper.service.DynamicNotificationService",
             "dumpsys deviceidle whitelist +$packageName",
             "setprop persist.sys.feature.island true",
-            "resetprop persist.sys.feature.island true"
-        ) + protocolCmd + listOf(
+            "resetprop persist.sys.feature.island true",
+            "settings put system notification_focus_protocol $targetProtocol",
             "cmd appops set $packageName AUTO_START allow",
             "cmd appops set $packageName 10008 allow",
             "cmd appops set $packageName 10020 allow",

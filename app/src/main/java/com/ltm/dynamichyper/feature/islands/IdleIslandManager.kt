@@ -79,7 +79,8 @@ class IdleIslandManager(
 
                 val root = org.json.JSONObject()
                 val paramV2 = org.json.JSONObject()
-                paramV2.put("protocol", 1)
+                val protocolVer = FocusProtocolHelper.getFocusProtocolVersion(context)
+                paramV2.put("protocol", protocolVer)
                 paramV2.put("business", "permanent_island")
                 paramV2.put("updatable", true)
                 paramV2.put("ticker", "Permanent Island")

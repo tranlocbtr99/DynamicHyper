@@ -77,6 +77,32 @@ object FocusProtocolHelper {
     }
 
     /**
+     * Xác định phiên bản giao thức Focus Protocol của thiết bị:
+     * 1: HyperOS 1
+     * 2: HyperOS 2
+     * 3: HyperOS 3 / 4
+     */
+    fun getFocusProtocolVersion(context: Context): Int {
+        val sysProtocol = try {
+            android.provider.Settings.System.getInt(
+                context.contentResolver,
+                "notification_focus_protocol",
+                0
+            )
+        } catch (_: Throwable) {
+            0
+        }
+        if (sysProtocol in 1..3) return sysProtocol
+
+        // Nếu chưa set trong Settings.System, đoán theo phiên bản Android SDK
+        return when {
+            Build.VERSION.SDK_INT >= 35 -> 2 // Android 15 (HyperOS 2)
+            Build.VERSION.SDK_INT >= 34 -> 1 // Android 14 (HyperOS 1)
+            else -> 1
+        }
+    }
+
+    /**
      * Hỏi thẳng SystemUI: package này có được phép hiện Focus Island không.
      * Đây chính là cổng mà app-op "Thông báo nổi" (10033/10020) điều khiển.
      */
@@ -112,17 +138,14 @@ object FocusProtocolHelper {
     }
 
     /**
-     * true = máy có khả năng vẽ đảo; false = chắc chắn không.
-     * Khi không đọc được thông tin (null) thì trả true để không chặn oan người dùng.
+     * Kiểm tra xem thiết bị có hỗ trợ đảo động hay không.
+     * Lưu ý quan trọng: KHÔNG chặn cứng khi islandFeature == false hoặc canShowFocus == false,
+     * vì nhiều ROM Global trả về false hoặc chưa bật cờ nhưng SystemUI vẫn hỗ trợ render
+     * hoặc Shizuku có thể kích hoạt lúc runtime. Chỉ trả về false nếu thiết bị chắc chắn không phải Xiaomi.
      */
     fun isFocusIslandSupported(context: Context): Boolean {
         val gate = focusGate(context)
-        return when {
-            !gate.isXiaomi -> false
-            gate.islandFeature == false -> false
-            gate.canShowFocus == false -> false
-            else -> true
-        }
+        return gate.isXiaomi
     }
 
     fun isKeyguardLocked(context: Context): Boolean {
@@ -194,7 +217,8 @@ object FocusProtocolHelper {
         // Xiaomi HyperOS quy định islandProperty là 1 (Hiển thị) hoặc 2 (Thao tác), trên Lockscreen là 0
         val isLocked = isKeyguardLocked(context)
         val targetIslandProperty = if (isLocked) 0 else DEFAULT_ISLAND_PROPERTY
-        val patchedJson = patchIslandProperty(jsonParam, targetIslandProperty)
+        val targetProtocol = getFocusProtocolVersion(context)
+        val patchedJson = patchIslandJson(jsonParam, targetIslandProperty, targetProtocol)
 
         val notif = builder.build()
         if (isOngoing) {
@@ -227,12 +251,13 @@ object FocusProtocolHelper {
         return notif
     }
 
-    private fun patchIslandProperty(json: String, property: Int): String {
+    private fun patchIslandJson(json: String, property: Int, protocol: Int): String {
         return try {
             val root = JsonParser.parseString(json).asJsonObject
             val paramV2 = root.getAsJsonObject("param_v2") ?: root
             val island = paramV2.getAsJsonObject("param_island") ?: root
             island.addProperty("islandProperty", property)
+            paramV2.addProperty("protocol", protocol)
             Gson().toJson(root)
         } catch (_: Exception) {
             json

@@ -204,7 +204,7 @@ class CallIslandManager(
 
             val root = JSONObject()
             val paramV2 = JSONObject()
-            paramV2.put("protocol", 1)
+            paramV2.put("protocol", FocusProtocolHelper.getFocusProtocolVersion(context))
             paramV2.put("business", "taxi")
             paramV2.put("updatable", true)
             paramV2.put("ticker", "$callerName đang gọi...")
