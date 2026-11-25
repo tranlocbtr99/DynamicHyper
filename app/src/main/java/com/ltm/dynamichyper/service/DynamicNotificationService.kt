@@ -89,8 +89,12 @@ class DynamicNotificationService : NotificationListenerService() {
         callIslandManager = CallIslandManager(this, serviceScope, prefs)
 
         serviceScope.launch {
-            if (prefs.isVpnIslandEnabled.first()) {
-                vpnIslandManager.startListening()
+            prefs.isVpnIslandEnabled.collect { enabled ->
+                if (enabled) {
+                    vpnIslandManager.startListening()
+                } else {
+                    vpnIslandManager.stopListening()
+                }
             }
         }
 
@@ -189,12 +193,14 @@ class DynamicNotificationService : NotificationListenerService() {
         if (sbn.packageName == packageName) {
             when (sbn.id) {
                 IdleIslandManager.IDLE_ISLAND_ID -> {
-                    Log.i(TAG, "Idle Island (9999) was removed. Auto-restoring immediately...")
                     idleIslandManager.isShowing = false
                     IdleIslandManager.resetCache()
                     serviceScope.launch {
-                        delay(150L)
-                        idleIslandManager.reassert(force = true)
+                        if (prefs.isPersistentMode.first()) {
+                            Log.i(TAG, "Idle Island (9999) was removed. Auto-restoring immediately...")
+                            delay(150L)
+                            idleIslandManager.reassert(force = true)
+                        }
                     }
                 }
                 CallIslandManager.CALL_ISLAND_ID -> {

@@ -870,7 +870,7 @@ internal fun OverviewTabScreen(
 
                 GlassSettingItem(
                     title = "Hiệu Ứng Gradient Thông Báo",
-                    subtitle = "Phát quang viền gradient neon hologram khi có thông báo mới bung ra.",
+                    subtitle = "Vòng phát quang gradient neon & màu nhấn theo từng ứng dụng khi thông báo bung ra.",
                     checked = isNotificationGradientGlow,
                     onCheckedChange = { checked ->
                         scope.launch {

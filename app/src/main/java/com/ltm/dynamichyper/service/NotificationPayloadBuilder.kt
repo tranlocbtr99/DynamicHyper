@@ -35,19 +35,23 @@ object NotificationPayloadBuilder {
         dynamicIslandId: Int
     ): Notification {
         val notif = sbn.notification
-        val avatarBmp = extractCircularAvatar(context, sbn)
+        val rawAvatarBmp = extractCircularAvatar(context, sbn)
+        val highlightColor = resolveHighlightColor(
+            packageName = sbn.packageName,
+            avatarBmp = rawAvatarBmp,
+            isMedia = isMedia,
+            isPaletteEnabled = isPaletteEnabled,
+            isGradientGlow = isGradientGlow
+        )
+        val avatarBmp = if (isGradientGlow) {
+            applyGradientGlowRing(rawAvatarBmp, highlightColor)
+        } else {
+            rawAvatarBmp
+        }
         val picKey = "notif_avatar"
         val pics = mapOf(
             picKey to avatarBmp,
             "hidden_pixel" to Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
-        )
-
-        val highlightColor = resolveHighlightColor(
-            packageName = sbn.packageName,
-            avatarBmp = avatarBmp,
-            isMedia = isMedia,
-            isPaletteEnabled = isPaletteEnabled,
-            isGradientGlow = isGradientGlow
         )
 
         val actionsMap = mutableMapOf<String, Any>()
@@ -86,7 +90,7 @@ object NotificationPayloadBuilder {
                     put("textInfo", JSONObject().apply {
                         put("title", title)
                         put("content", text)
-                        put("showHighlightColor", false)
+                        put("showHighlightColor", isGradientGlow || (isMedia && isPaletteEnabled))
                     })
                 })
             })
@@ -110,15 +114,15 @@ object NotificationPayloadBuilder {
             put("reopen", isNewMessage)
             put("param_island", paramIsland)
             put("baseInfo", JSONObject().apply {
-                put("type", 2)
+                put("type", 1)
+                put("picInfo", JSONObject().apply {
+                    put("type", 1)
+                    put("pic", "miui.focus.pic_$picKey")
+                })
                 put("title", title)
                 put("content", text)
             })
             put("iconTextInfo", JSONObject().apply {
-                put("animIconInfo", JSONObject().apply {
-                    put("type", 1)
-                    put("src", "miui.focus.pic_$picKey")
-                })
                 put("title", title)
                 put("content", text)
             })
@@ -156,7 +160,8 @@ object NotificationPayloadBuilder {
             isOngoing = isMedia,
             onlyAlertOnce = !isNewMessage,
             contentIntent = if (!isMedia) wrappedContentIntent else notif.contentIntent,
-            actionsMap = actionsMap
+            actionsMap = actionsMap,
+            largeIcon = avatarBmp
         )
     }
 
@@ -308,5 +313,45 @@ object NotificationPayloadBuilder {
         paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
         canvas.drawBitmap(src, null, rect, paint)
         return output
+    }
+
+    private fun applyGradientGlowRing(src: Bitmap, accentHex: String): Bitmap {
+        val size = 108
+        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        val center = size / 2f
+
+        val primaryColor = try {
+            Color.parseColor(accentHex)
+        } catch (_: Exception) {
+            Color.parseColor("#5E5CE6")
+        }
+        val secondaryColor = Color.parseColor("#00F2FE")
+
+        val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = RadialGradient(
+                center, center, center,
+                intArrayOf(primaryColor, Color.TRANSPARENT),
+                floatArrayOf(0.75f, 1.0f),
+                Shader.TileMode.CLAMP
+            )
+            alpha = 180
+        }
+        canvas.drawCircle(center, center, center, glowPaint)
+
+        val inset = 8f
+        canvas.drawBitmap(src, null, RectF(inset, inset, size - inset, size - inset), Paint(Paint.ANTI_ALIAS_FLAG))
+
+        val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 4f
+            shader = SweepGradient(
+                center, center,
+                intArrayOf(primaryColor, secondaryColor, Color.parseColor("#BF5AF2"), primaryColor),
+                null
+            )
+        }
+        canvas.drawCircle(center, center, center - 7f, ringPaint)
+        return out
     }
 }

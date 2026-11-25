@@ -129,6 +129,22 @@ class ChargingIslandManager(
         } catch (e: Exception) {
             Log.e(TAG, "Register battery receiver failed: ${e.message}")
         }
+
+        scope.launch {
+            prefs.isChargingIslandEnabled.collect { enabled ->
+                if (!enabled && isChargingActive) {
+                    hideChargingIsland()
+                } else if (enabled && !isChargingActive) {
+                    val sticky = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                    val status = sticky?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+                    val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                        status == BatteryManager.BATTERY_STATUS_FULL
+                    if (isCharging) {
+                        showChargingIsland(getBatteryPercentage(), sticky)
+                    }
+                }
+            }
+        }
     }
 
     fun stopListening() {

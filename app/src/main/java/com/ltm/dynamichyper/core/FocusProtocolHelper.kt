@@ -174,7 +174,8 @@ object FocusProtocolHelper {
         priority: Int = NotificationCompat.PRIORITY_HIGH,
         contentIntent: android.app.PendingIntent? = null,
         actionsMap: Map<String, Any> = emptyMap(),
-        enablePromotedLiveUpdate: Boolean = true
+        enablePromotedLiveUpdate: Boolean = true,
+        largeIcon: Bitmap? = null
     ): Notification {
         // Luôn đảm bảo Channel được khởi tạo với IMPORTANCE_HIGH trước khi build
         setupChannel(context)
@@ -208,6 +209,9 @@ object FocusProtocolHelper {
 
         if (contentIntent != null) {
             builder.setContentIntent(contentIntent)
+        }
+        if (largeIcon != null) {
+            builder.setLargeIcon(largeIcon)
         }
 
         // Build miui.focus.pics bundle

@@ -13,10 +13,14 @@ import kotlin.math.roundToInt
 
 data class LiveWeatherData(
     val temp: Int = 28,
+    val apparentTemp: Int = 30,
     val condition: String = "Nhiều mây",
     val iconEmoji: String = "⛅",
     val city: String = "TP. Hồ Chí Minh",
     val humidity: Int = 75,
+    val windSpeed: Int = 10,
+    val tempMax: Int = 33,
+    val tempMin: Int = 25,
     val weatherCode: Int = 3
 )
 
@@ -76,7 +80,7 @@ object WeatherManager {
             }
 
             // 2. Lấy thời tiết từ Open-Meteo
-            val weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,relative_humidity_2m,weather_code"
+            val weatherUrl = "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code&daily=temperature_2m_max,temperature_2m_min&forecast_days=1"
             val conn = (URL(weatherUrl).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 5000
                 readTimeout = 5000
@@ -87,8 +91,14 @@ object WeatherManager {
                 val root = JsonParser.parseString(body).asJsonObject
                 val current = root.getAsJsonObject("current")
                 val temp = current.get("temperature_2m").asDouble.roundToInt()
+                val apparentTemp = current.get("apparent_temperature")?.asDouble?.roundToInt() ?: temp
                 val humidity = current.get("relative_humidity_2m")?.asDouble?.roundToInt() ?: 75
+                val windSpeed = current.get("wind_speed_10m")?.asDouble?.roundToInt() ?: 10
                 val code = current.get("weather_code").asInt
+
+                val daily = root.getAsJsonObject("daily")
+                val tempMax = daily?.getAsJsonArray("temperature_2m_max")?.firstOrNull()?.asDouble?.roundToInt() ?: (temp + 3)
+                val tempMin = daily?.getAsJsonArray("temperature_2m_min")?.firstOrNull()?.asDouble?.roundToInt() ?: (temp - 4)
 
                 val (icon, condition) = when (code) {
                     0 -> "☀️" to "Trời nắng"
@@ -105,10 +115,14 @@ object WeatherManager {
 
                 currentData = LiveWeatherData(
                     temp = temp,
+                    apparentTemp = apparentTemp,
                     condition = condition,
                     iconEmoji = icon,
                     city = detectedCity,
                     humidity = humidity,
+                    windSpeed = windSpeed,
+                    tempMax = tempMax,
+                    tempMin = tempMin,
                     weatherCode = code
                 )
                 lastFetchTime = System.currentTimeMillis()

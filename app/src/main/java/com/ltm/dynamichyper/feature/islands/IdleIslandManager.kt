@@ -94,20 +94,20 @@ class IdleIslandManager(
                 // Thông tin hiển thị trên thẻ bung mở rộng (Expanded Card) và thông số ngắn bên phải viên thuốc
                 val (notifTitle, notifContent, pillRightText, highlightColor) = when (style) {
                     "weather" -> Quad(
-                        "${weather.temp}°C • ${weather.condition}",
-                        "${weather.city} • Độ ẩm ${weather.humidity}% • Pin ${temp}°C",
+                        "${weather.iconEmoji} ${weather.temp}°C • ${weather.condition} (Cảm giác ${weather.apparentTemp}°C)",
+                        "${weather.city} • Ẩm ${weather.humidity}% • Gió ${weather.windSpeed} km/h • ${weather.tempMin}°–${weather.tempMax}°C",
                         "${weather.temp}°C",
                         "#FFD60A"
                     )
                     "battery_temp" -> Quad(
                         "Pin ${temp}°C • ${if (temp < 38) "Mát mẻ" else if (temp <= 42) "Ấm" else "Nóng"}",
-                        "RAM $ramGb GB • Thời tiết ${weather.temp}°C",
+                        "${IdleIslandRenderer.getBatteryPowerSummary(context)} • Thời tiết ${weather.temp}°C",
                         "${temp}°C",
                         if (temp < 38) "#30D158" else if (temp <= 42) "#FF9F0A" else "#FF453A"
                     )
                     "ram_usage" -> Quad(
-                        "RAM $ramGb GB • Đa nhiệm mượt",
-                        "Pin ${temp}°C • Thời tiết ${weather.temp}°C",
+                        "RAM đang dùng $ramGb GB",
+                        IdleIslandRenderer.getRamDetailSummary(context),
                         "${ramGb}G",
                         "#00F2FE"
                     )
@@ -134,9 +134,10 @@ class IdleIslandManager(
                     highlightColor = highlightColor
                 )
 
+                val bigWidgetBmp = IdleIslandRenderer.renderBigWidgetIcon(context, style)
                 val pics = mapOf(
                     PIC_IDLE_DOT to IdleIslandRenderer.renderIdleDotBitmap(context, style),
-                    PIC_IDLE_LEFT to IdleIslandRenderer.renderBigWidgetIcon(context, style),
+                    PIC_IDLE_LEFT to bigWidgetBmp,
                     PIC_HIDDEN to Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
                 )
 
@@ -171,7 +172,8 @@ class IdleIslandManager(
                     isSilent = true,
                     priority = NotificationCompat.PRIORITY_HIGH,
                     contentIntent = contentIntent,
-                    enablePromotedLiveUpdate = false
+                    enablePromotedLiveUpdate = false,
+                    largeIcon = bigWidgetBmp
                 )
 
                 FocusProtocolHelper.postNotificationSafely(context, IDLE_ISLAND_ID, notification)
@@ -204,7 +206,7 @@ class IdleIslandManager(
                 if (style != "minimal") {
                     put("picInfo", JSONObject().apply {
                         put("type", 1)
-                        put("pic", "miui.focus.pic_${if (style == "green_dot") PIC_IDLE_DOT else PIC_IDLE_LEFT}")
+                        put("pic", "miui.focus.pic_$PIC_IDLE_DOT")
                     })
                 }
                 put("textInfo", JSONObject().apply {
@@ -263,15 +265,15 @@ class IdleIslandManager(
                 put("reopen", true)
                 put("param_island", paramIsland)
                 put("baseInfo", JSONObject().apply {
-                    put("type", 2)
+                    put("type", 1)
+                    put("picInfo", JSONObject().apply {
+                        put("type", 1)
+                        put("pic", "miui.focus.pic_$PIC_IDLE_LEFT")
+                    })
                     put("title", notifTitle)
                     put("content", notifContent)
                 })
                 put("iconTextInfo", JSONObject().apply {
-                    put("animIconInfo", JSONObject().apply {
-                        put("type", 1)
-                        put("src", "miui.focus.pic_$PIC_IDLE_LEFT")
-                    })
                     put("title", notifTitle)
                     put("content", notifContent)
                 })
