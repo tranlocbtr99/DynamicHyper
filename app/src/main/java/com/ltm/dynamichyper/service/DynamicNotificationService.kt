@@ -270,17 +270,16 @@ class DynamicNotificationService : NotificationListenerService() {
         val isMessaging = isMessagingApp(sbn)
         val isMedia = isMediaApp(sbn)
 
-        if (!isMessaging && !isMedia) return
-
-        if (isMedia && !prefs.isMediaIslandEnabled.first()) return
-        if (isMessaging && !prefs.isMessageIslandEnabled.first()) return
-
-        // 2. Kiểm tra bộ lọc thông báo từng ứng dụng do người dùng cấu hình (Blacklist Model)
+        // Kiểm tra bộ lọc thông báo từng ứng dụng do người dùng cấu hình (Blacklist Model)
         val disabledApps = prefs.disabledPackages.first()
         if (!prefs.isPackageAllowed(sbn.packageName, disabledApps)) {
             Log.d(TAG, "Notification from ${sbn.packageName} ignored by user per-app setting")
             return
         }
+
+        // Tôn trọng thiết lập bật/tắt Đảo Nhạc & Đảo Thông Báo của người dùng
+        if (isMedia && !prefs.isMediaIslandEnabled.first()) return
+        if (!isMedia && !prefs.isMessageIslandEnabled.first()) return
 
         // Chống spam bung đảo liên tục: Kiểm tra nếu tiêu đề & nội dung không đổi
         val contentKey = "$title|$text"

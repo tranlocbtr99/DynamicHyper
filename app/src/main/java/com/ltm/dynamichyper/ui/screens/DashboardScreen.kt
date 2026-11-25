@@ -189,6 +189,7 @@ private fun OverviewTabScreen(
     var showDiagnosticDialog by remember { mutableStateOf(false) }
     var updateInfoState by remember { mutableStateOf<UpdateInfo?>(null) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
+    var isPermissionsExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(isAutoStartMarked) {
         isPostNotificationGranted = PermissionHelper.isPostNotificationGranted(context)
@@ -447,7 +448,8 @@ private fun OverviewTabScreen(
             }
         }
 
-        // Nút kích hoạt nhanh tất cả
+        // Hero Status & Điều Khiển 1-Chạm (Apple Liquid Glass Clean Design)
+        val isAllReady = isShizukuReady && isNotificationAccessGranted && isPostNotificationGranted && isFloatingNotificationGranted
         LiquidGlassCard(hazeState = hazeState) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -455,79 +457,39 @@ private fun OverviewTabScreen(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(44.dp)
                         .clip(CircleShape)
-                        .background(if (isShizukuReady || isNotificationAccessGranted) AppleTeal.copy(alpha = 0.2f) else AppleBlue.copy(alpha = 0.2f)),
+                        .background(if (isAllReady) AppleTeal.copy(alpha = 0.2f) else AppleBlue.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (isShizukuReady || isNotificationAccessGranted) Icons.Default.CheckCircle else Icons.Default.Bolt,
+                        imageVector = if (isAllReady) Icons.Default.CheckCircle else Icons.Default.Bolt,
                         contentDescription = null,
-                        tint = if (isShizukuReady || isNotificationAccessGranted) AppleTeal else AppleBlue
+                        tint = if (isAllReady) AppleTeal else AppleBlue,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Kích Hoạt Tự Động 1-Chạm",
-                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+                        text = if (isAllReady) "Đảo Đang Hoạt Động" else "Kích Hoạt Tự Động",
+                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     )
                     Text(
-                        text = if (isNotificationAccessGranted && isPostNotificationGranted) "Hệ thống đang hoạt động ổn định" else "Tự động cấp toàn bộ quyền và tối ưu Xiaomi",
-                        style = Typography.bodyMedium.copy(fontSize = 12.sp, color = TextSecondary)
+                        text = if (isAllReady) "Đã tối ưu Shizuku & kết nối SystemUI thành công" else "Tự động cấp quyền và đồng bộ hệ thống HyperOS",
+                        style = Typography.bodyMedium.copy(fontSize = 12.sp, color = if (isAllReady) AppleTeal else TextSecondary)
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            LiquidActionButton(
-                text = if (isShizukuReady) "TỰ ĐỘNG TỐI ƯU HÓA TẤT CẢ (SHIZUKU)" else "KÍCH HOẠT NHANH TẤT CẢ",
-                onClick = {
-                    if (ShizukuEngine.isShizukuAvailable()) {
-                        if (!ShizukuEngine.hasShizukuPermission()) {
-                            ShizukuEngine.requestShizukuPermission()
-                        } else {
-                            val success = ShizukuEngine.applyOneTouchOptimizations(context)
-                            PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
-                            isShizukuReady = true
-                            // Đọc lại trạng thái THẬT sau khi Shizuku áp dụng, không ép cứng true
-                            isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
-                            isPostNotificationGranted = PermissionHelper.isPostNotificationGranted(context)
-                            isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
-                            isBatteryOptimizationIgnored = PermissionHelper.isBatteryOptimizationIgnored(context)
-                            isAutoStartGranted = PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_BG_START)
-                            isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_SHOW_WHEN_LOCKED)
-                            scope.launch { prefs.setAutoStartMarked(true) }
-                            IdleIslandManager.resetCache()
-                            IdleIslandManager.showIdleIsland(context, idleIslandWidth)
-                            Toast.makeText(
-                                context,
-                                if (success) "Đã tối ưu hóa thành công 100%! Đảo đã kích hoạt." else "Đã áp dụng tối ưu hóa hệ thống.",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    } else {
-                        if (!isPostNotificationGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            postNotificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        } else {
-                            PermissionHelper.openNotificationAccessSettings(context)
-                        }
-                    }
-                }
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
+            // Nút Thử Đảo Nổi Bật Chính
             LiquidActionButton(
                 text = "⚡ TEST BẮN ĐẢO NGAY (BUNG ĐẢO TRỰC QUAN)",
                 onClick = {
-                    if (ShizukuEngine.isShizukuAvailable()) {
-                        if (!ShizukuEngine.hasShizukuPermission()) {
-                            ShizukuEngine.requestShizukuPermission()
-                        } else {
-                            ShizukuEngine.applyXmsfBypass(context)
-                        }
+                    if (ShizukuEngine.isShizukuAvailable() && ShizukuEngine.hasShizukuPermission()) {
+                        ShizukuEngine.applyXmsfBypass(context)
                     }
                     IdleIslandManager.resetCache()
                     IdleIslandManager.showIdleIsland(context, idleIslandWidth, force = true)
@@ -535,181 +497,208 @@ private fun OverviewTabScreen(
                     Toast.makeText(context, "Đang bung Đảo Động Test lên camera notch (4s)...", Toast.LENGTH_SHORT).show()
                 }
             )
-        }
 
-        // Card Tự Động Vượt Rào Xiaomi XMSF (Chuẩn HyperBridge)
-        LiquidGlassCard(hazeState = hazeState) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(AppleTeal.copy(alpha = 0.2f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = null,
-                        tint = AppleTeal
-                    )
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Vượt Rào Xiaomi Tự Động",
-                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AppleTeal)
-                    )
-                    Text(
-                        text = "Công nghệ Shizuku Privileged UserService (Chuẩn HyperBridge)",
-                        style = Typography.bodyMedium.copy(fontSize = 12.sp, color = TextSecondary)
-                    )
-                }
+            // Nút phụ Kích hoạt / Tối ưu hóa (Hiển thị tinh tế dạng nút Outline khi cần thiết)
+            if (!isAllReady || !isShizukuReady) {
+                Spacer(modifier = Modifier.height(8.dp))
+                LiquidActionButton(
+                    text = if (isShizukuReady) "TỰ ĐỘNG TỐI ƯU HÓA HỆ THỐNG (SHIZUKU)" else "KÍCH HOẠT NHANH TẤT CẢ QUYỀN",
+                    onClick = {
+                        if (ShizukuEngine.isShizukuAvailable()) {
+                            if (!ShizukuEngine.hasShizukuPermission()) {
+                                ShizukuEngine.requestShizukuPermission()
+                            } else {
+                                val success = ShizukuEngine.applyOneTouchOptimizations(context)
+                                PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
+                                isShizukuReady = true
+                                isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
+                                isPostNotificationGranted = PermissionHelper.isPostNotificationGranted(context)
+                                isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
+                                isBatteryOptimizationIgnored = PermissionHelper.isBatteryOptimizationIgnored(context)
+                                isAutoStartGranted = PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_BG_START)
+                                isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, PermissionHelper.OP_MIUI_SHOW_WHEN_LOCKED)
+                                scope.launch { prefs.setAutoStartMarked(true) }
+                                IdleIslandManager.resetCache()
+                                IdleIslandManager.showIdleIsland(context, idleIslandWidth)
+                                Toast.makeText(
+                                    context,
+                                    if (success) "Đã tối ưu hóa thành công 100%! Đảo đã kích hoạt." else "Đã áp dụng tối ưu hóa hệ thống.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        } else {
+                            if (!isPostNotificationGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                postNotificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                PermissionHelper.openNotificationAccessSettings(context)
+                            }
+                        }
+                    }
+                )
             }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = "✨ Hệ thống đã tích hợp cơ chế tự động 100%: Ứng dụng tự động điều phối firewall của XMSF trong 50ms khi phát thông báo để SystemUI chấp nhận Đảo Tiêu Điểm, sau đó tự phục hồi mạng ngay lập tức. Bạn hoàn toàn không cần phải thao tác thủ công trong Cài đặt!",
-                style = Typography.bodySmall.copy(fontSize = 12.sp, color = TextPrimary)
-            )
         }
 
-        // Quyền hệ thống (Compact)
+        // Quyền hệ thống (Sleek Collapsible Panel)
         LiquidGlassCard(hazeState = hazeState) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isPermissionsExpanded = !isPermissionsExpanded },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Trạng Thái Quyền Hệ Thống",
-                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = AppleBlue)
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (grantedCount == 7) AppleTeal.copy(alpha = 0.2f) else AppleOrange.copy(alpha = 0.2f))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (grantedCount >= 7) Icons.Default.CheckCircle else Icons.Default.Security,
+                        contentDescription = null,
+                        tint = if (grantedCount >= 7) AppleTeal else AppleOrange,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (grantedCount == 7) "Hoàn hảo 7/7" else "$grantedCount/7 Đã cấp",
-                        style = Typography.labelSmall.copy(
-                            color = if (grantedCount == 7) AppleTeal else AppleOrange,
-                            fontWeight = FontWeight.Bold
+                        text = "Quyền Hệ Thống",
+                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = TextPrimary)
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (grantedCount >= 7) AppleTeal.copy(alpha = 0.2f) else AppleOrange.copy(alpha = 0.2f))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = if (grantedCount >= 7) "Hoàn hảo $grantedCount/8" else "$grantedCount/8 Đã cấp",
+                            style = Typography.labelSmall.copy(
+                                color = if (grantedCount >= 7) AppleTeal else AppleOrange,
+                                fontWeight = FontWeight.Bold
+                            )
                         )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        imageVector = if (isPermissionsExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Mở rộng quyền",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-            HorizontalDivider(color = GlassBorderSubtle)
+            AnimatedVisibility(
+                visible = isPermissionsExpanded || grantedCount < 7,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider(color = GlassBorderSubtle)
 
-            CompactPermissionItem(
-                title = "Cho Phép Gửi Thông Báo (App)",
-                icon = Icons.Default.NotificationsActive,
-                isGranted = isPostNotificationGranted,
-                onActionClick = {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !isPostNotificationGranted) {
-                        postNotificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        PermissionHelper.openAppNotificationSettings(context)
-                    }
+                    CompactPermissionItem(
+                        title = "Cho Phép Gửi Thông Báo (App)",
+                        icon = Icons.Default.NotificationsActive,
+                        isGranted = isPostNotificationGranted,
+                        onActionClick = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !isPostNotificationGranted) {
+                                postNotificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                PermissionHelper.openAppNotificationSettings(context)
+                            }
+                        }
+                    )
+
+                    HorizontalDivider(color = GlassBorderSubtle)
+
+                    CompactPermissionItem(
+                        title = "Thông Báo Tiêu Điểm (Featured Notifications)",
+                        icon = Icons.Default.Star,
+                        isGranted = isFeaturedNotificationGranted,
+                        onActionClick = {
+                            PermissionHelper.openAppNotificationSettings(context)
+                        }
+                    )
+
+                    HorizontalDivider(color = GlassBorderSubtle)
+
+                    CompactPermissionItem(
+                        title = "Thông Báo Nổi (HyperOS Island)",
+                        icon = Icons.Default.Fullscreen,
+                        isGranted = isFloatingNotificationGranted,
+                        onActionClick = {
+                            if (isShizukuReady) {
+                                val ok = PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
+                                isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
+                                Toast.makeText(
+                                    context,
+                                    when {
+                                        isFloatingNotificationGranted -> "Đã bật Thông Báo Nổi qua Shizuku!"
+                                        ok -> "Đã gửi lệnh nhưng HyperOS chưa xác nhận. Kiểm tra lại trong Cài đặt."
+                                        else -> "Shizuku chưa cấp quyền. Mở Cài đặt để bật thủ công."
+                                    },
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                PermissionHelper.openAppNotificationSettings(context)
+                            }
+                        }
+                    )
+
+                    HorizontalDivider(color = GlassBorderSubtle)
+
+                    CompactPermissionItem(
+                        title = "Truy Cập Đọc Thông Báo",
+                        icon = Icons.Default.Notifications,
+                        isGranted = isNotificationAccessGranted,
+                        onActionClick = {
+                            if (!isRestrictedAllowed && !isNotificationAccessGranted) {
+                                showRestrictedDialog = true
+                            } else {
+                                PermissionHelper.openNotificationAccessSettings(context)
+                            }
+                        }
+                    )
+
+                    HorizontalDivider(color = GlassBorderSubtle)
+
+                    CompactPermissionItem(
+                        title = "Hiển Thị Trên Màn Hình Khóa",
+                        icon = Icons.Default.Lock,
+                        isGranted = isLockscreenOpGranted,
+                        onActionClick = { PermissionHelper.openMiuiOtherPermissions(context) }
+                    )
+
+                    HorizontalDivider(color = GlassBorderSubtle)
+
+                    CompactPermissionItem(
+                        title = "Không Giới Hạn Pin (Chạy ngầm)",
+                        icon = Icons.Default.BatteryChargingFull,
+                        isGranted = isBatteryOptimizationIgnored,
+                        onActionClick = { PermissionHelper.requestIgnoreBatteryOptimizations(context) }
+                    )
+
+                    HorizontalDivider(color = GlassBorderSubtle)
+
+                    CompactPermissionItem(
+                        title = "Tự Khởi Chạy (AutoStart)",
+                        icon = Icons.Default.Refresh,
+                        isGranted = isAutoStartGranted,
+                        onActionClick = {
+                            scope.launch { prefs.setAutoStartMarked(true) }
+                            PermissionHelper.openMiuiAutoStartSettings(context)
+                        }
+                    )
+
+                    HorizontalDivider(color = GlassBorderSubtle)
+
+                    CompactPermissionItem(
+                        title = "Cài Đặt Cập Nhật (OTA)",
+                        icon = Icons.Default.SystemUpdate,
+                        isGranted = isInstallGranted,
+                        onActionClick = { PermissionHelper.openInstallPermissionSettings(context) }
+                    )
                 }
-            )
-
-            HorizontalDivider(color = GlassBorderSubtle)
-
-            CompactPermissionItem(
-                title = "Thông Báo Tiêu Điểm (Featured Notifications)",
-                icon = Icons.Default.Star,
-                isGranted = isFeaturedNotificationGranted,
-                onActionClick = {
-                    PermissionHelper.openAppNotificationSettings(context)
-                }
-            )
-
-            HorizontalDivider(color = GlassBorderSubtle)
-
-            CompactPermissionItem(
-                title = "Thông Báo Nổi (HyperOS Island)",
-                icon = Icons.Default.Fullscreen,
-                isGranted = isFloatingNotificationGranted,
-                onActionClick = {
-                    if (isShizukuReady) {
-                        val ok = PermissionHelper.setMiuiFloatingNotificationEnabled(context.packageName, true)
-                        isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
-                        Toast.makeText(
-                            context,
-                            when {
-                                isFloatingNotificationGranted -> "Đã bật Thông Báo Nổi qua Shizuku!"
-                                ok -> "Đã gửi lệnh nhưng HyperOS chưa xác nhận. Kiểm tra lại trong Cài đặt."
-                                else -> "Shizuku chưa cấp quyền. Mở Cài đặt để bật thủ công."
-                            },
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    } else {
-                        PermissionHelper.openAppNotificationSettings(context)
-                    }
-                }
-            )
-
-            HorizontalDivider(color = GlassBorderSubtle)
-
-            CompactPermissionItem(
-                title = "Truy Cập Đọc Thông Báo",
-                icon = Icons.Default.Notifications,
-                isGranted = isNotificationAccessGranted,
-                onActionClick = {
-                    if (!isRestrictedAllowed && !isNotificationAccessGranted) {
-                        showRestrictedDialog = true
-                    } else {
-                        PermissionHelper.openNotificationAccessSettings(context)
-                    }
-                }
-            )
-
-            HorizontalDivider(color = GlassBorderSubtle)
-
-            CompactPermissionItem(
-                title = "Hiển Thị Trên Màn Hình Khóa",
-                icon = Icons.Default.Lock,
-                isGranted = isLockscreenOpGranted,
-                onActionClick = { PermissionHelper.openMiuiOtherPermissions(context) }
-            )
-
-            HorizontalDivider(color = GlassBorderSubtle)
-
-            CompactPermissionItem(
-                title = "Không Giới Hạn Pin (Chạy ngầm)",
-                icon = Icons.Default.BatteryChargingFull,
-                isGranted = isBatteryOptimizationIgnored,
-                onActionClick = { PermissionHelper.requestIgnoreBatteryOptimizations(context) }
-            )
-
-            HorizontalDivider(color = GlassBorderSubtle)
-
-            CompactPermissionItem(
-                title = "Tự Khởi Chạy (AutoStart)",
-                icon = Icons.Default.Refresh,
-                isGranted = isAutoStartGranted,
-                onActionClick = {
-                    scope.launch { prefs.setAutoStartMarked(true) }
-                    // Không ép isAutoStartGranted = true: người dùng vẫn phải vào Cài đặt và bật tay
-                    PermissionHelper.openMiuiAutoStartSettings(context)
-                }
-            )
-
-            HorizontalDivider(color = GlassBorderSubtle)
-
-            CompactPermissionItem(
-                title = "Cài Đặt Cập Nhật (OTA)",
-                icon = Icons.Default.SystemUpdate,
-                isGranted = isInstallGranted,
-                onActionClick = { PermissionHelper.openInstallPermissionSettings(context) }
-            )
+            }
         }
 
         // Đảo Chờ 24/7 & Căn Chỉnh Nốt Ruồi Camera
@@ -956,7 +945,7 @@ private fun OverviewTabScreen(
                         style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                     Text(
-                        text = "Phiên bản v1.5.0 • Liquid Glass Edition",
+                        text = "Phiên bản $currentVersion • Liquid Glass",
                         style = Typography.bodyMedium.copy(fontSize = 12.sp, color = AppleTeal)
                     )
                 }
@@ -968,9 +957,8 @@ private fun OverviewTabScreen(
 
             Text(
                 text = "• Thiết kế & Phát triển: Tran Minh Loc (LTM)\n" +
-                        "• Kiến trúc: HyperIsland Core Protocol & LTMori Multi-Task Shield\n" +
-                        "• Nền tảng: Xiaomi HyperOS 3 & 4 / Android 15 - 17\n" +
-                        "• Tương thích: Toàn bộ thiết bị Xiaomi, Redmi, POCO",
+                        "• Kiến trúc: HyperIsland Core Protocol & Shizuku Privileged Engine\n" +
+                        "• Tương thích: Toàn bộ thiết bị Xiaomi, Redmi, POCO (HyperOS 1, 2, 3)",
                 style = Typography.bodyMedium.copy(fontSize = 12.sp, color = TextSecondary, lineHeight = 20.sp)
             )
 
