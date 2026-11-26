@@ -43,6 +43,7 @@ object FocusProtocolHelper {
             setSound(null, null)
             enableVibration(false)
             setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             description = "Notification channel powering Xiaomi HyperOS Focus Islands"
         }
         manager.createNotificationChannel(channel)
@@ -247,9 +248,9 @@ object FocusProtocolHelper {
             builder.addExtras(actResourceBundle)
         }
 
-        // Xiaomi HyperOS quy định islandProperty là 1 (Hiển thị) hoặc 2 (Thao tác), trên Lockscreen là 0 trừ khi giữ đảo 24/7
+        // Xiaomi HyperOS quy định islandProperty là 1 (Hiển thị khi mở khóa), trên Lockscreen bắt buộc là 0 để hiện lên màn hình khóa
         val isLocked = isKeyguardLocked(context)
-        val targetIslandProperty = if (isLocked && !keepIslandOnLockscreen) 0 else DEFAULT_ISLAND_PROPERTY
+        val targetIslandProperty = if (isLocked) 0 else DEFAULT_ISLAND_PROPERTY
         val targetProtocol = getFocusProtocolVersion(context)
         val patchedJson = patchIslandJson(jsonParam, targetIslandProperty, targetProtocol)
 

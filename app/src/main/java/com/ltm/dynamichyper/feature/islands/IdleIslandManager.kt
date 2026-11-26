@@ -160,7 +160,8 @@ class IdleIslandManager(
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
 
-                val currentText = "$style|$notifTitle|$notifContent|$effectiveWidth"
+                val isLocked = FocusProtocolHelper.isKeyguardLocked(context)
+                val currentText = "$style|$notifTitle|$notifContent|$effectiveWidth|$isLocked"
                 if (!force && lastDispatchedWidgetText == currentText && instance?.isShowing == true) {
                     return
                 }

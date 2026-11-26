@@ -46,7 +46,7 @@ class DynamicNotificationService : NotificationListenerService() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> {
+                Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON, Intent.ACTION_SCREEN_OFF -> {
                     reconcileActiveIslandsAndRestoreIdle(forceReassert = true)
                 }
             }
@@ -108,6 +108,7 @@ class DynamicNotificationService : NotificationListenerService() {
         val screenFilter = IntentFilter().apply {
             addAction(Intent.ACTION_USER_PRESENT)
             addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
         }
         registerReceiver(screenReceiver, screenFilter)
 
