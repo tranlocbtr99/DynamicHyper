@@ -88,11 +88,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- Dynamic Hyper iOS Liquid Glass Inline Reply Receiver & Overlay Service -->
-        <receiver
-            android:name=".feature.reply.InlineReplyReceiver"
-            android:exported="true" />
-
         <receiver
             android:name=".core.OtpCopyReceiver"
             android:exported="false">
@@ -100,10 +95,6 @@
                 <action android:name="com.ltm.dynamichyper.ACTION_COPY_OTP" />
             </intent-filter>
         </receiver>
-
-        <service
-            android:name=".feature.reply.InlineReplyService"
-            android:exported="false" />
 
         <activity
             android:name=".feature.reply.InlineReplyActivity"
