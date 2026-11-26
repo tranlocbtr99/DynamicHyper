@@ -109,6 +109,8 @@ class CallIslandManager(
 
     private var currentCallKey: String? = null
 
+    fun getCurrentCallKey(): String? = currentCallKey
+
     fun handleCallNotification(sbn: StatusBarNotification) {
         scope.launch {
             if (!prefs.isCallIslandEnabled.first()) return@launch
@@ -150,7 +152,14 @@ class CallIslandManager(
                             b
                         } else null
                     }
-                    else -> null
+                    else -> {
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                            val person = extras.getParcelable(Notification.EXTRA_CALL_PERSON, android.app.Person::class.java)
+                            person?.icon?.loadDrawable(context)?.let { d ->
+                                if (d is android.graphics.drawable.BitmapDrawable) d.bitmap else null
+                            }
+                        } else null
+                    }
                 }
             } catch (_: Exception) { null }
 
@@ -186,6 +195,7 @@ class CallIslandManager(
         try {
             NotificationManagerCompat.from(context).cancel(CALL_ISLAND_ID)
         } catch (_: Exception) {}
+        IdleIslandManager.setBlockerStatic("call", false)
         Log.i(TAG, "Call Island hidden")
     }
 
@@ -261,10 +271,49 @@ class CallIslandManager(
 
             paramV2.put("param_island", paramIsland)
 
+            val baseInfo = JSONObject().apply {
+                put("type", 1)
+                put("picInfo", JSONObject().apply {
+                    put("type", 1)
+                    put("pic", "miui.focus.pic_$PIC_CALL_AVATAR")
+                })
+                put("title", callerName)
+                put("content", callStatus)
+            }
+            paramV2.put("baseInfo", baseInfo)
+
             val iconTextInfo = JSONObject()
             iconTextInfo.put("title", callerName)
             iconTextInfo.put("content", callStatus)
             paramV2.put("iconTextInfo", iconTextInfo)
+
+            val textButtons = org.json.JSONArray()
+            val actionsMap = mutableMapOf<String, Any>()
+            if (declineAction != null) {
+                actionsMap["miui.focus.action_decline"] = declineAction
+                textButtons.put(JSONObject().apply {
+                    put("type", 1)
+                    put("actionTitle", "Từ chối")
+                    put("action", "miui.focus.action_decline")
+                    put("actionIntent", "miui.focus.action_decline")
+                    put("actionIntentType", 1)
+                    put("actionTitleColor", "#FF453A")
+                })
+            }
+            if (answerAction != null) {
+                actionsMap["miui.focus.action_answer"] = answerAction
+                textButtons.put(JSONObject().apply {
+                    put("type", 1)
+                    put("actionTitle", "Nghe máy")
+                    put("action", "miui.focus.action_answer")
+                    put("actionIntent", "miui.focus.action_answer")
+                    put("actionIntentType", 1)
+                    put("actionTitleColor", "#30D158")
+                })
+            }
+            if (textButtons.length() > 0) {
+                paramV2.put("textButton", textButtons)
+            }
 
             root.put("param_v2", paramV2)
             root.put("isShowNotification", true)
@@ -277,7 +326,6 @@ class CallIslandManager(
                 PIC_CALL_ICON to callIcon
             )
 
-            val actionsMap = mutableMapOf<String, Any>()
             val notificationBuilder = NotificationCompat.Builder(context, FocusProtocolHelper.CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentTitle(callerName)
@@ -292,24 +340,20 @@ class CallIslandManager(
                 notificationBuilder.setContentIntent(contentIntent)
             }
 
-            // Gắn action Từ chối
             if (declineAction != null) {
                 notificationBuilder.addAction(
                     android.R.drawable.ic_menu_close_clear_cancel,
                     "Từ chối",
                     declineAction.actionIntent
                 )
-                actionsMap["action_decline"] = declineAction
             }
 
-            // Gắn action Nghe máy
             if (answerAction != null) {
                 notificationBuilder.addAction(
                     android.R.drawable.ic_menu_call,
                     "Nghe máy",
                     answerAction.actionIntent
                 )
-                actionsMap["action_answer"] = answerAction
             }
 
             val notification = FocusProtocolHelper.buildFocusNotification(
@@ -323,7 +367,9 @@ class CallIslandManager(
                 onlyAlertOnce = false,
                 priority = NotificationCompat.PRIORITY_MAX,
                 contentIntent = contentIntent,
-                actionsMap = actionsMap
+                actionsMap = actionsMap,
+                largeIcon = circularAvatar,
+                keepIslandOnLockscreen = true
             )
 
             // Đưa actions vào notification object

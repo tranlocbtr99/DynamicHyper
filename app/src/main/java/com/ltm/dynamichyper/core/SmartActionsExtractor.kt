@@ -14,11 +14,11 @@ import java.util.regex.Pattern
  */
 object SmartActionsExtractor {
 
+    private val OTP_CONTEXT_KEYWORD = Regex("(?i)(otp|mã\\s*xác\\s*thực|ma\\s*xac\\s*thuc|verification|mã\\s*gd|ma\\s*gd|mã\\s*bảo\\s*mật|passcode|mã\\s*kích\\s*hoạt|code\\s*(?:is|là|:))")
+
     private val OTP_PATTERNS = listOf(
-        // Mã OTP: 123456 hoặc OTP: 1234
-        Pattern.compile("(?i)(?:otp|mã xác thực|ma xac thuc|verification code|code|mã gd|ma gd)\\s*(?:là|is|:)?\\s*([0-9]{4,8})"),
-        // Chuỗi 4-8 số độc lập trong tin nhắn ngân hàng / SMS
-        Pattern.compile("\\b([0-9]{4,8})\\b")
+        Pattern.compile("(?i)(?:otp|mã\\s*xác\\s*thực|ma\\s*xac\\s*thuc|verification\\s*code|mã\\s*gd|ma\\s*gd|mã\\s*bảo\\s*mật|passcode|mã\\s*kích\\s*hoạt|code)\\s*(?:là|của\\s*bạn\\s*là|is|:|-)?\\s*([0-9]{4,8})\\b"),
+        Pattern.compile("(?i)\\b([0-9]{4,8})\\s*(?:là\\s*mã\\s*xác\\s*thực|là\\s*mã\\s*otp|is\\s*your\\s*(?:verification\\s*)?code)\\b")
     )
 
     data class ExtractedAction(
@@ -29,11 +29,11 @@ object SmartActionsExtractor {
     )
 
     /**
-     * Tìm mã OTP trong tiêu đề hoặc nội dung thông báo
+     * Tìm mã OTP theo ngữ cảnh chặt chẽ (tránh bắt nhầm số tài khoản/năm)
      */
     fun findOtpCode(text: String): String? {
         if (text.isBlank()) return null
-        // Loại trừ số tài khoản, số dư lớn, số điện thoại 10 số
+        if (!OTP_CONTEXT_KEYWORD.containsMatchIn(text)) return null
         for (pattern in OTP_PATTERNS) {
             val matcher = pattern.matcher(text)
             if (matcher.find()) {

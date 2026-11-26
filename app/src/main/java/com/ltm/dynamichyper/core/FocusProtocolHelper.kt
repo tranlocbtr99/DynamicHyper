@@ -175,7 +175,8 @@ object FocusProtocolHelper {
         contentIntent: android.app.PendingIntent? = null,
         actionsMap: Map<String, Any> = emptyMap(),
         enablePromotedLiveUpdate: Boolean = true,
-        largeIcon: Bitmap? = null
+        largeIcon: Bitmap? = null,
+        keepIslandOnLockscreen: Boolean = false
     ): Notification {
         // Luôn đảm bảo Channel được khởi tạo với IMPORTANCE_HIGH trước khi build
         setupChannel(context)
@@ -225,13 +226,20 @@ object FocusProtocolHelper {
             builder.addExtras(resourceBundle)
         }
 
-        // Build miui.focus.actions bundle for Action Buttons & Quick Reply
+        // Build miui.focus.actions bundle for Action Buttons & Quick Reply (luôn chuẩn Notification.Action)
         if (actionsMap.isNotEmpty()) {
             val actionsBundle = Bundle()
             for ((key, act) in actionsMap) {
                 when (act) {
                     is Notification.Action -> actionsBundle.putParcelable(key, act)
-                    is android.app.PendingIntent -> actionsBundle.putParcelable(key, act)
+                    is android.app.PendingIntent -> {
+                        val wrappedAction = Notification.Action.Builder(
+                            Icon.createWithResource(context, smallIconRes),
+                            "Action",
+                            act
+                        ).build()
+                        actionsBundle.putParcelable(key, wrappedAction)
+                    }
                 }
             }
             val actResourceBundle = Bundle()
@@ -239,9 +247,9 @@ object FocusProtocolHelper {
             builder.addExtras(actResourceBundle)
         }
 
-        // Xiaomi HyperOS quy định islandProperty là 1 (Hiển thị) hoặc 2 (Thao tác), trên Lockscreen là 0
+        // Xiaomi HyperOS quy định islandProperty là 1 (Hiển thị) hoặc 2 (Thao tác), trên Lockscreen là 0 trừ khi giữ đảo 24/7
         val isLocked = isKeyguardLocked(context)
-        val targetIslandProperty = if (isLocked) 0 else DEFAULT_ISLAND_PROPERTY
+        val targetIslandProperty = if (isLocked && !keepIslandOnLockscreen) 0 else DEFAULT_ISLAND_PROPERTY
         val targetProtocol = getFocusProtocolVersion(context)
         val patchedJson = patchIslandJson(jsonParam, targetIslandProperty, targetProtocol)
 
@@ -318,10 +326,12 @@ object FocusProtocolHelper {
         context: Context,
         id: Int,
         notification: Notification,
-        scope: CoroutineScope? = null
+        scope: CoroutineScope? = null,
+        shouldCancel: (() -> Boolean)? = null
     ) {
         val s = scope ?: CoroutineScope(Dispatchers.IO)
         s.launch {
+            if (shouldCancel?.invoke() == true) return@launch
             ShizukuEngine.postNotificationSafely(context, id, notification)
         }
     }

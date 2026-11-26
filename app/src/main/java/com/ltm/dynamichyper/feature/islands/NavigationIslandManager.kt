@@ -80,10 +80,23 @@ object NavigationIslandManager {
             val smallPic = JSONObject()
             smallPic.put("type", 1)
             smallPic.put("pic", "miui.focus.pic_$PIC_NAV_ICON")
-            smallIslandArea.put("smallPictureInfo", smallPic)
+            smallIslandArea.put("picInfo", smallPic)
             paramIsland.put("smallIslandArea", smallIslandArea)
 
             paramV2.put("param_island", paramIsland)
+            paramV2.put("baseInfo", JSONObject().apply {
+                put("type", 1)
+                put("picInfo", JSONObject().apply {
+                    put("type", 1)
+                    put("pic", "miui.focus.pic_$PIC_NAV_ICON")
+                })
+                put("title", title.ifBlank { "Chỉ Đường" })
+                put("content", content.ifBlank { "Đang dẫn đường..." })
+            })
+            paramV2.put("iconTextInfo", JSONObject().apply {
+                put("title", title.ifBlank { "Chỉ Đường" })
+                put("content", content.ifBlank { "Đang dẫn đường..." })
+            })
             root.put("param_v2", paramV2)
             root.put("isShowNotification", true)
 
@@ -111,9 +124,11 @@ object NavigationIslandManager {
                 jsonParam = root.toString(),
                 pics = pics,
                 isOngoing = true,
-                priority = NotificationCompat.PRIORITY_HIGH
+                priority = NotificationCompat.PRIORITY_HIGH,
+                largeIcon = navBmp
             )
 
+            IdleIslandManager.setBlockerStatic("nav", true)
             FocusProtocolHelper.postNotificationSafely(context, NAV_ISLAND_ID, notification)
             AppLogger.d(TAG, "Đã gửi Đảo Dẫn Đường: $title - $content")
         } catch (e: Exception) {

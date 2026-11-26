@@ -58,6 +58,7 @@ class IslandTapActivity : Activity() {
             setPackage(packageName)
             putExtra(EXTRA_SBN_KEY, intent.getStringExtra(EXTRA_SBN_KEY))
             putExtra(EXTRA_ISLAND_ID, intent.getIntExtra(EXTRA_ISLAND_ID, -1))
+            putExtra(EXTRA_IS_MEDIA, intent.getBooleanExtra(EXTRA_IS_MEDIA, false))
         })
 
         finish()
@@ -71,5 +72,6 @@ class IslandTapActivity : Activity() {
         const val EXTRA_ISLAND_ID = "island_id"
         const val EXTRA_ORIGINAL_INTENT = "original_intent"
         const val EXTRA_TARGET_PKG = "target_pkg"
+        const val EXTRA_IS_MEDIA = "is_media"
     }
 }

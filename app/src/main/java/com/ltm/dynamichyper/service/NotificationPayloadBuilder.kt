@@ -13,13 +13,12 @@ import com.ltm.dynamichyper.core.FocusProtocolHelper
 import com.ltm.dynamichyper.core.OtpCopyReceiver
 import com.ltm.dynamichyper.core.PaletteHelper
 import com.ltm.dynamichyper.core.SmartActionsExtractor
-import com.ltm.dynamichyper.feature.reply.InlineReplyReceiver
+import com.ltm.dynamichyper.feature.reply.InlineReplyActivity
 import org.json.JSONArray
 import org.json.JSONObject
 
 /**
- * Bộ dựng Notification & JSON Focus Protocol cho các thông báo ứng dụng (Tin nhắn, Nhạc, OTP).
- * Tách riêng khỏi DynamicNotificationService để mã nguồn gọn gàng, dễ bảo trì.
+ * Bộ dựng Notification & JSON Focus Protocol cho Tin nhắn, Nhạc/Video, Báo thức, Tiến trình & OTP.
  */
 object NotificationPayloadBuilder {
 
@@ -29,6 +28,8 @@ object NotificationPayloadBuilder {
         title: String,
         text: String,
         isMedia: Boolean,
+        isAlarm: Boolean = false,
+        progressPercent: Int? = null,
         isNewMessage: Boolean,
         isPaletteEnabled: Boolean,
         isGradientGlow: Boolean,
@@ -40,10 +41,11 @@ object NotificationPayloadBuilder {
             packageName = sbn.packageName,
             avatarBmp = rawAvatarBmp,
             isMedia = isMedia,
+            isAlarm = isAlarm,
             isPaletteEnabled = isPaletteEnabled,
             isGradientGlow = isGradientGlow
         )
-        val avatarBmp = if (isGradientGlow) {
+        val avatarBmp = if (isGradientGlow || isAlarm) {
             applyGradientGlowRing(rawAvatarBmp, highlightColor)
         } else {
             rawAvatarBmp
@@ -56,17 +58,40 @@ object NotificationPayloadBuilder {
 
         val actionsMap = mutableMapOf<String, Any>()
         val textButtonsArray = JSONArray()
-        extractSmartAndReplyActions(context, sbn, title, text, actionsMap, textButtonsArray)
+        extractSmartAndReplyActions(
+            context = context,
+            sbn = sbn,
+            title = title,
+            text = text,
+            isMedia = isMedia,
+            isAlarm = isAlarm,
+            actionsMap = actionsMap,
+            textButtonsArray = textButtonsArray
+        )
+
+        // Rút gọn nhãn ở viên thuốc thu gọn (bigIslandArea.imageTextInfoRight) để KHÔNG kéo dài đảo
+        val pillLabel = when {
+            isAlarm -> "⏰ Báo thức"
+            progressPercent != null -> "$progressPercent%"
+            else -> compactLabel(title, if (isMedia) 12 else 10)
+        }
+
+        val shouldFloatOnArrival = (isNewMessage || isAlarm) && !isMedia && progressPercent == null
+        val expandedSec = when {
+            isAlarm -> 6
+            isNewMessage -> 3
+            else -> 0
+        }
 
         val paramIsland = JSONObject().apply {
             put("islandProperty", 1)
-            put("islandPriority", 2)
+            put("islandPriority", if (isAlarm) 5 else 2)
             put("islandTimeout", 86400000)
             put("islandOrder", false)
             put("dismissIsland", false)
             put("maxSize", false)
             put("needCloseAnimation", true)
-            put("expandedTime", if (isNewMessage) 3 else 0)
+            put("expandedTime", expandedSec)
             put("highlightColor", highlightColor)
             put("bigIslandArea", JSONObject().apply {
                 put("imageTextInfoLeft", JSONObject().apply {
@@ -88,9 +113,9 @@ object NotificationPayloadBuilder {
                         put("pic", "miui.focus.pic_hidden_pixel")
                     })
                     put("textInfo", JSONObject().apply {
-                        put("title", title)
-                        put("content", text)
-                        put("showHighlightColor", isGradientGlow || (isMedia && isPaletteEnabled))
+                        put("title", pillLabel)
+                        put("content", "")
+                        put("showHighlightColor", isGradientGlow || isAlarm || (isMedia && isPaletteEnabled))
                     })
                 })
             })
@@ -108,10 +133,10 @@ object NotificationPayloadBuilder {
             put("updatable", true)
             put("ticker", if (text.isNotBlank()) "$title: $text" else title)
             put("timeout", 86400000)
-            put("enableFloat", true)
+            put("enableFloat", shouldFloatOnArrival)
             put("isShowNotification", true)
-            put("islandFirstFloat", isNewMessage)
-            put("reopen", isNewMessage)
+            put("islandFirstFloat", shouldFloatOnArrival)
+            put("reopen", isAlarm || isNewMessage)
             put("param_island", paramIsland)
             put("baseInfo", JSONObject().apply {
                 put("type", 1)
@@ -142,6 +167,7 @@ object NotificationPayloadBuilder {
             putExtra(IslandTapActivity.EXTRA_ISLAND_ID, dynamicIslandId)
             putExtra(IslandTapActivity.EXTRA_ORIGINAL_INTENT, notif.contentIntent)
             putExtra(IslandTapActivity.EXTRA_TARGET_PKG, sbn.packageName)
+            putExtra(IslandTapActivity.EXTRA_IS_MEDIA, isMedia || isAlarm || progressPercent != null)
         }
         val wrappedContentIntent = PendingIntent.getActivity(
             context,
@@ -157,12 +183,19 @@ object NotificationPayloadBuilder {
             smallIconRes = R.drawable.ic_launcher_foreground,
             jsonParam = jsonParam,
             pics = pics,
-            isOngoing = isMedia,
-            onlyAlertOnce = !isNewMessage,
-            contentIntent = if (!isMedia) wrappedContentIntent else notif.contentIntent,
+            isOngoing = isMedia || isAlarm || progressPercent != null,
+            onlyAlertOnce = !isNewMessage && !isAlarm,
+            contentIntent = wrappedContentIntent,
             actionsMap = actionsMap,
-            largeIcon = avatarBmp
+            largeIcon = avatarBmp,
+            keepIslandOnLockscreen = isAlarm
         )
+    }
+
+    private fun compactLabel(raw: String, maxLen: Int): String {
+        val clean = raw.trim().replace("\n", " ")
+        if (clean.length <= maxLen) return clean
+        return clean.take(maxLen - 1) + "…"
     }
 
     private fun extractSmartAndReplyActions(
@@ -170,55 +203,73 @@ object NotificationPayloadBuilder {
         sbn: StatusBarNotification,
         title: String,
         text: String,
+        isMedia: Boolean,
+        isAlarm: Boolean,
         actionsMap: MutableMap<String, Any>,
         textButtonsArray: JSONArray
     ) {
-        val otpCode = SmartActionsExtractor.findOtpCode("$title $text")
-        if (otpCode != null) {
-            val copyIntent = Intent(context, OtpCopyReceiver::class.java).apply {
-                action = "com.ltm.dynamichyper.ACTION_COPY_OTP"
-                putExtra("otp_code", otpCode)
+        val maxButtons = if (isMedia || isAlarm) 3 else 2
+
+        if (!isMedia && !isAlarm) {
+            val otpCode = SmartActionsExtractor.findOtpCode("$title $text")
+            if (otpCode != null) {
+                val copyIntent = Intent(context, OtpCopyReceiver::class.java).apply {
+                    action = "com.ltm.dynamichyper.ACTION_COPY_OTP"
+                    putExtra("otp_code", otpCode)
+                }
+                val copyPendingIntent = PendingIntent.getBroadcast(
+                    context,
+                    otpCode.hashCode(),
+                    copyIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                val actionKey = "miui.focus.action_copy_otp"
+                val nativeAction = Notification.Action.Builder(
+                    Icon.createWithResource(context, R.drawable.ic_launcher_foreground),
+                    "Sao chép $otpCode",
+                    copyPendingIntent
+                ).build()
+                actionsMap[actionKey] = nativeAction
+                textButtonsArray.put(JSONObject().apply {
+                    put("type", 1)
+                    put("actionTitle", "Sao chép $otpCode")
+                    put("action", actionKey)
+                    put("actionIntent", actionKey)
+                    put("actionIntentType", 1)
+                    put("actionTitleColor", "#30D158")
+                })
             }
-            val copyPendingIntent = PendingIntent.getBroadcast(
-                context,
-                otpCode.hashCode(),
-                copyIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            val actionKey = "miui.focus.action_copy_otp"
-            actionsMap[actionKey] = copyPendingIntent
-            textButtonsArray.put(JSONObject().apply {
-                put("type", 1)
-                put("actionTitle", "Sao chép $otpCode")
-                put("action", actionKey)
-                put("actionIntent", actionKey)
-                put("actionIntentType", 1)
-                put("actionTitleColor", "#30D158")
-            })
         }
 
         val rawActions = sbn.notification.actions ?: return
         for ((index, act) in rawActions.withIndex()) {
-            val actionTitle = act.title?.toString() ?: ""
+            if (textButtonsArray.length() >= maxButtons) break
+            val actionTitle = act.title?.toString()?.trim() ?: ""
             if (actionTitle.isBlank()) continue
 
             val remoteInputs = act.remoteInputs
-            if (remoteInputs != null && remoteInputs.isNotEmpty()) {
+            if (!isMedia && !isAlarm && remoteInputs != null && remoteInputs.isNotEmpty() && act.actionIntent != null) {
                 val resultKey = remoteInputs[0].resultKey
-                val replyIntent = Intent(context, InlineReplyReceiver::class.java).apply {
+                val replyIntent = Intent(context, InlineReplyActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION
                     putExtra("pending_intent", act.actionIntent)
                     putExtra("result_key", resultKey)
                     putExtra("package_name", sbn.packageName)
                     putExtra("sender_title", title)
                 }
-                val replyPendingIntent = PendingIntent.getBroadcast(
+                val replyPendingIntent = PendingIntent.getActivity(
                     context,
                     (sbn.key + "_reply").hashCode(),
                     replyIntent,
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
                 )
                 val actionKey = "miui.focus.action_reply"
-                actionsMap[actionKey] = replyPendingIntent
+                val nativeAction = Notification.Action.Builder(
+                    Icon.createWithResource(context, R.drawable.ic_launcher_foreground),
+                    actionTitle.ifEmpty { "Trả lời" },
+                    replyPendingIntent
+                ).build()
+                actionsMap[actionKey] = nativeAction
                 textButtonsArray.put(JSONObject().apply {
                     put("type", 1)
                     put("actionTitle", actionTitle.ifEmpty { "Trả lời" })
@@ -229,14 +280,24 @@ object NotificationPayloadBuilder {
                 })
             } else if (act.actionIntent != null) {
                 val actionKey = "miui.focus.action_$index"
-                actionsMap[actionKey] = act.actionIntent
+                val nativeAction = Notification.Action.Builder(
+                    act.getIcon() ?: Icon.createWithResource(context, R.drawable.ic_launcher_foreground),
+                    actionTitle,
+                    act.actionIntent
+                ).build()
+                actionsMap[actionKey] = nativeAction
+                val colorHex = when {
+                    isAlarm && (actionTitle.contains("tắt", true) || actionTitle.contains("dismiss", true) || actionTitle.contains("stop", true)) -> "#FF453A"
+                    isAlarm -> "#FFD60A"
+                    else -> "#FFFFFF"
+                }
                 textButtonsArray.put(JSONObject().apply {
                     put("type", 1)
                     put("actionTitle", actionTitle)
                     put("action", actionKey)
                     put("actionIntent", actionKey)
                     put("actionIntentType", 1)
-                    put("actionTitleColor", "#FFFFFF")
+                    put("actionTitleColor", colorHex)
                 })
             }
         }
@@ -246,9 +307,11 @@ object NotificationPayloadBuilder {
         packageName: String,
         avatarBmp: Bitmap,
         isMedia: Boolean,
+        isAlarm: Boolean,
         isPaletteEnabled: Boolean,
         isGradientGlow: Boolean
     ): String = when {
+        isAlarm -> "#FF453A"
         isMedia && isPaletteEnabled -> PaletteHelper.extractDominantColorHex(avatarBmp)
         isGradientGlow -> when (packageName) {
             "com.zing.zalo" -> "#0088FF"
@@ -267,23 +330,14 @@ object NotificationPayloadBuilder {
         val rawAvatarBmp: Bitmap? = try {
             when (val largeIconObj = extras?.get(Notification.EXTRA_LARGE_ICON)) {
                 is Bitmap -> largeIconObj
-                is Icon -> {
-                    val drawable = largeIconObj.loadDrawable(context)
-                    if (drawable is BitmapDrawable) {
-                        drawable.bitmap
-                    } else if (drawable != null) {
-                        val bmp = Bitmap.createBitmap(
-                            drawable.intrinsicWidth.coerceAtLeast(96),
-                            drawable.intrinsicHeight.coerceAtLeast(96),
-                            Bitmap.Config.ARGB_8888
-                        )
-                        val canvas = Canvas(bmp)
-                        drawable.setBounds(0, 0, canvas.width, canvas.height)
-                        drawable.draw(canvas)
-                        bmp
+                is Icon -> loadIconBitmap(context, largeIconObj)
+                else -> {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        val person = extras?.getParcelable(Notification.EXTRA_CALL_PERSON, android.app.Person::class.java)
+                            ?: extras?.getParcelable(Notification.EXTRA_MESSAGING_PERSON, android.app.Person::class.java)
+                        person?.icon?.let { loadIconBitmap(context, it) }
                     } else null
                 }
-                else -> null
             }
         } catch (_: Exception) {
             null
@@ -301,6 +355,20 @@ object NotificationPayloadBuilder {
         } catch (_: Exception) {
             Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
         }
+    }
+
+    private fun loadIconBitmap(context: Context, icon: Icon): Bitmap? {
+        val drawable = icon.loadDrawable(context) ?: return null
+        if (drawable is BitmapDrawable) return drawable.bitmap
+        val bmp = Bitmap.createBitmap(
+            drawable.intrinsicWidth.coerceAtLeast(96),
+            drawable.intrinsicHeight.coerceAtLeast(96),
+            Bitmap.Config.ARGB_8888
+        )
+        val canvas = Canvas(bmp)
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+        return bmp
     }
 
     private fun createCircularBitmap(src: Bitmap): Bitmap {

@@ -294,7 +294,7 @@ class ChargingIslandManager(
         paramV2.put("business", "taxi")
         paramV2.put("updatable", true)
         paramV2.put("ticker", titleText)
-        paramV2.put("timeout", 1440)
+        paramV2.put("timeout", 86400000)
         paramV2.put("enableFloat", true)
         paramV2.put("isShowNotification", true)
         paramV2.put("islandFirstFloat", true)
@@ -350,6 +350,15 @@ class ChargingIslandManager(
         paramIsland.put("smallIslandArea", smallIslandArea)
 
         paramV2.put("param_island", paramIsland)
+        paramV2.put("baseInfo", JSONObject().apply {
+            put("type", 1)
+            put("picInfo", JSONObject().apply {
+                put("type", 1)
+                put("pic", "miui.focus.pic_$PIC_CHARGING_LIGHTNING")
+            })
+            put("title", titleText)
+            put("content", contentText)
+        })
 
         val iconTextInfo = JSONObject()
         iconTextInfo.put("title", titleText)
@@ -375,9 +384,12 @@ class ChargingIslandManager(
             jsonParam = jsonParam,
             pics = pics,
             isOngoing = true,
-            onlyAlertOnce = false
+            onlyAlertOnce = false,
+            largeIcon = lightningBmp,
+            keepIslandOnLockscreen = true
         )
 
+        IdleIslandManager.setBlockerStatic("charging", true)
         FocusProtocolHelper.postNotificationSafely(context, CHARGING_NOTIFICATION_ID, notif)
     }
 
@@ -388,8 +400,7 @@ class ChargingIslandManager(
         try {
             NotificationManagerCompat.from(context).cancel(CHARGING_NOTIFICATION_ID)
         } catch (_: Exception) {}
-        // Tự động khôi phục Đảo Chờ ngay sau khi rút sạc
-        IdleIslandManager.reassertStatic()
+        IdleIslandManager.setBlockerStatic("charging", false)
     }
 
     /**

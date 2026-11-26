@@ -93,7 +93,7 @@ class VpnIslandManager(private val context: Context) {
                 "business": "taxi",
                 "updatable": true,
                 "ticker": "VPN Đang Hoạt Động",
-                "timeout": 1440,
+                "timeout": 86400000,
                 "enableFloat": false,
                 "isShowNotification": true,
                 "islandFirstFloat": true,
@@ -150,9 +150,11 @@ class VpnIslandManager(private val context: Context) {
                 smallIconRes = R.drawable.ic_launcher_foreground,
                 jsonParam = jsonParam,
                 pics = pics,
-                isOngoing = true
+                isOngoing = true,
+                largeIcon = vpnDotBmp
             )
 
+            IdleIslandManager.setBlockerStatic("vpn", true)
             com.ltm.dynamichyper.core.FocusProtocolHelper.postNotificationSafely(context, VPN_NOTIFICATION_ID, notification)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to show VPN island: ${e.message}")
@@ -163,7 +165,6 @@ class VpnIslandManager(private val context: Context) {
         try {
             NotificationManagerCompat.from(context).cancel(VPN_NOTIFICATION_ID)
         } catch (_: Exception) {}
-        // Tự động khôi phục Đảo Chờ ngay sau khi ngắt kết nối VPN
-        IdleIslandManager.reassertStatic()
+        IdleIslandManager.setBlockerStatic("vpn", false)
     }
 }

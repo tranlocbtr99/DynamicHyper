@@ -44,15 +44,16 @@ class KeepAliveService : Service() {
     private fun createKeepAliveChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            try { manager.deleteNotificationChannel("dynamic_hyper_keep_alive_channel") } catch (_: Throwable) {}
             val channel = NotificationChannel(
                 KEEP_ALIVE_CHANNEL_ID,
-                "Dynamic Hyper Dịch Vụ Nền",
-                NotificationManager.IMPORTANCE_LOW
+                "Dịch vụ duy trì nền",
+                NotificationManager.IMPORTANCE_MIN
             ).apply {
                 setShowBadge(false)
                 setSound(null, null)
                 enableVibration(false)
-                description = "Duy trì kết nối nền cho Đảo Động"
+                description = "Duy trì kết nối lắng nghe thông báo nền"
             }
             manager.createNotificationChannel(channel)
         }
@@ -111,13 +112,14 @@ class KeepAliveService : Service() {
         )
         return NotificationCompat.Builder(this, KEEP_ALIVE_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Dynamic Hyper – Đảo Chờ")
-            .setContentText("Đang giữ kết nối thông báo nền cho Đảo Chờ")
+            .setContentTitle("Dịch vụ nền đang hoạt động")
+            .setContentText("Giữ kết nối lắng nghe thông báo 24/7")
             .setContentIntent(contentIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setSilent(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .build()
     }
 
@@ -135,15 +137,22 @@ class KeepAliveService : Service() {
         rebindJob?.cancel()
         rebindJob = CoroutineScope(Dispatchers.Default).launch {
             while (true) {
-                delay(5 * 60 * 1000L)
-                rebindListener()
-                Log.d(TAG, "Periodic listener rebind")
+                delay(60 * 1000L)
+                if (!com.ltm.dynamichyper.core.ListenerWatchdog.isListenerConnected) {
+                    rebindListener()
+                }
+                if (!com.ltm.dynamichyper.feature.islands.IdleIslandManager.shouldSuppressIdle()) {
+                    val mgr = com.ltm.dynamichyper.feature.islands.IdleIslandManager.getInstance()
+                    if (mgr != null && !mgr.isShowing) {
+                        mgr.reassert(force = true, delayMs = 200L)
+                    }
+                }
             }
         }
     }
 
     companion object {
         const val ACTION_STOP = "com.ltm.dynamichyper.action.STOP_KEEP_ALIVE"
-        const val KEEP_ALIVE_CHANNEL_ID = "dynamic_hyper_keep_alive_channel"
+        const val KEEP_ALIVE_CHANNEL_ID = "dynamic_hyper_keep_alive_v2"
     }
 }

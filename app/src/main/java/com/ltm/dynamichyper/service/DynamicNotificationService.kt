@@ -5,6 +5,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -39,13 +40,14 @@ class DynamicNotificationService : NotificationListenerService() {
     private val activeDynamicIslands = ConcurrentHashMap<String, Int>()
     private val activeDismissJobs = ConcurrentHashMap<String, Job>()
     private val lastNotificationContent = ConcurrentHashMap<String, String>()
+    private val lastPostedTimestamp = ConcurrentHashMap<String, Long>()
     private val intentionallyRemovedKeys = ConcurrentHashMap<String, Long>()
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
                 Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON -> {
-                    reconcileActiveIslandsAndRestoreIdle()
+                    reconcileActiveIslandsAndRestoreIdle(forceReassert = true)
                 }
             }
         }
@@ -56,6 +58,11 @@ class DynamicNotificationService : NotificationListenerService() {
             if (intent?.action == IslandTapActivity.ACTION_ISLAND_CLICKED) {
                 val sbnKey = intent.getStringExtra(IslandTapActivity.EXTRA_SBN_KEY)
                 val islandId = intent.getIntExtra(IslandTapActivity.EXTRA_ISLAND_ID, -1)
+                val isPersistentInteractive = intent.getBooleanExtra(IslandTapActivity.EXTRA_IS_MEDIA, false)
+                if (isPersistentInteractive) {
+                    Log.d(TAG, "Người dùng chạm mở trình phát nhạc/video/báo thức -> giữ đảo (key=$sbnKey)")
+                    return
+                }
                 Log.i(TAG, "Người dùng đã nhấn xem thông báo trên Đảo (key=$sbnKey, id=$islandId) -> Dọn đảo & khôi phục Đảo Chờ")
 
                 if (sbnKey != null) {
@@ -145,7 +152,7 @@ class DynamicNotificationService : NotificationListenerService() {
             )
             if (yieldMs != null) {
                 NativeIslandTracker.note(sbn.key, yieldMs)
-                idleIslandManager.onEventCountChanged(activeDynamicIslands.size + 1)
+                IdleIslandManager.setBlockerStatic("native", true)
             }
             return
         }
@@ -153,21 +160,22 @@ class DynamicNotificationService : NotificationListenerService() {
         if (NavigationIslandManager.isNavNotification(sbn)) {
             val title = sbn.notification.extras?.getString(Notification.EXTRA_TITLE) ?: ""
             val content = sbn.notification.extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
+            IdleIslandManager.setBlockerStatic("nav", true)
             NavigationIslandManager.showNavIsland(this, title, content)
-            idleIslandManager.onEventCountChanged(activeDynamicIslands.size + 1)
             return
         }
 
         if (CallIslandManager.isCallNotification(sbn)) {
             Log.i(TAG, "Incoming call detected from ${sbn.packageName}")
+            IdleIslandManager.setBlockerStatic("call", true)
             callIslandManager.handleCallNotification(sbn)
-            idleIslandManager.onEventCountChanged(activeDynamicIslands.size + 1)
             return
         }
 
         if (ScreenRecordingIslandManager.isScreenRecordingNotification(sbn)) {
             serviceScope.launch {
                 if (prefs.isScreenRecordingIslandEnabled.first()) {
+                    IdleIslandManager.setBlockerStatic("record", true)
                     ScreenRecordingIslandManager.showRecordingIsland(this@DynamicNotificationService)
                 }
             }
@@ -233,19 +241,22 @@ class DynamicNotificationService : NotificationListenerService() {
         }
 
         if (NativeIslandTracker.remove(sbn.key)) {
-            idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
+            IdleIslandManager.setBlockerStatic("native", NativeIslandTracker.hasFresh())
         }
 
         if (NavigationIslandManager.isNavNotification(sbn)) {
             NavigationIslandManager.hideNavIsland(this)
+            IdleIslandManager.setBlockerStatic("nav", false)
         }
 
-        if (CallIslandManager.isCallNotification(sbn) || callIslandManager.isCallActive) {
+        if (sbn.key == callIslandManager.getCurrentCallKey()) {
             callIslandManager.hideCallIsland()
+            IdleIslandManager.setBlockerStatic("call", false)
         }
 
         if (sbn.packageName == "com.miui.screenrecorder") {
             ScreenRecordingIslandManager.hideRecordingIsland(this)
+            IdleIslandManager.setBlockerStatic("record", false)
         }
 
         if (intentionallyRemovedKeys.remove(sbn.key) != null) {
@@ -269,7 +280,7 @@ class DynamicNotificationService : NotificationListenerService() {
         }
     }
 
-    private fun reconcileActiveIslandsAndRestoreIdle() {
+    private fun reconcileActiveIslandsAndRestoreIdle(forceReassert: Boolean = false) {
         try {
             val currentNotifs = try { activeNotifications } catch (_: Exception) { null } ?: return
             val liveKeys = currentNotifs.filter { it.packageName != packageName }.map { it.key }.toSet()
@@ -290,6 +301,9 @@ class DynamicNotificationService : NotificationListenerService() {
 
             if (activeDynamicIslands.isEmpty()) {
                 idleIslandManager.onEventCountChanged(0)
+                if (forceReassert && !IdleIslandManager.shouldSuppressIdle()) {
+                    idleIslandManager.reassert(force = true, delayMs = 200L)
+                }
             }
         } catch (e: Exception) {
             Log.w(TAG, "reconcileActiveIslands error: ${e.message}")
@@ -316,26 +330,33 @@ class DynamicNotificationService : NotificationListenerService() {
         }
 
         val extras = notif.extras ?: return
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""
-        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim() ?: ""
+        val title = (extras.getCharSequence(Notification.EXTRA_TITLE)
+            ?: extras.getCharSequence(Notification.EXTRA_TITLE_BIG))?.toString()?.trim() ?: ""
+        val text = extractBestNotificationText(extras)
         if (title.isBlank() && text.isBlank()) return
         if (title.equals(sbn.packageName, ignoreCase = true) || text.equals(sbn.packageName, ignoreCase = true)) return
 
         val isMessaging = isMessagingApp(sbn)
         val isMedia = isMediaApp(sbn)
+        val isAlarm = isAlarmNotification(sbn)
+        val progressPercent = extractProgressPercent(extras)
 
-        // Lọc thông báo hệ thống chạy ngầm & dịch vụ ongoing không phải nhạc
+        // Lọc thông báo hệ thống chạy ngầm & dịch vụ ongoing không phải nhạc/báo thức/tiến trình tải
         if (sbn.packageName in IGNORED_SYSTEM_PACKAGES) return
-        if (sbn.isOngoing && !isMedia) return
+        if (sbn.isOngoing && !isMedia && !isAlarm && progressPercent == null) return
 
         val disabledApps = prefs.disabledPackages.first()
         if (!prefs.isPackageAllowed(sbn.packageName, disabledApps)) return
         if (isMedia && !prefs.isMediaIslandEnabled.first()) return
-        if (!isMedia && !prefs.isMessageIslandEnabled.first()) return
+        if (!isMedia && !isAlarm && !prefs.isMessageIslandEnabled.first()) return
 
-        val contentKey = "$title|$text"
+        val contentKey = "${sbn.packageName}|$title|$text|${progressPercent ?: -1}"
+        val now = System.currentTimeMillis()
+        val lastAt = lastPostedTimestamp[contentKey] ?: 0L
         val isSameContent = (lastNotificationContent[sbn.key] == contentKey)
-        if (isSameContent && isMedia) return
+        if (isSameContent && (isMedia || now - lastAt < 800L)) return
+        lastPostedTimestamp[contentKey] = now
+
         val isNewMessage = isMessaging && !isSameContent
         lastNotificationContent[sbn.key] = contentKey
 
@@ -347,9 +368,11 @@ class DynamicNotificationService : NotificationListenerService() {
         val notification = NotificationPayloadBuilder.buildAppFocusNotification(
             context = this,
             sbn = sbn,
-            title = title,
+            title = title.ifBlank { sbn.packageName.substringAfterLast('.') },
             text = text,
             isMedia = isMedia,
+            isAlarm = isAlarm,
+            progressPercent = progressPercent,
             isNewMessage = isNewMessage,
             isPaletteEnabled = prefs.isPaletteColorEnabled.first(),
             isGradientGlow = prefs.isNotificationGradientGlow.first(),
@@ -367,10 +390,10 @@ class DynamicNotificationService : NotificationListenerService() {
                 Log.w("DynamicNotif", "Không thể cancelNotification: ${e.message}")
             }
         }
-        AppLogger.i(TAG, "Đã gửi thông báo Focus cho ${sbn.packageName} (id=$dynamicIslandId, isMedia=$isMedia)")
+        AppLogger.i(TAG, "Đã gửi thông báo Focus cho ${sbn.packageName} (id=$dynamicIslandId, media=$isMedia, alarm=$isAlarm)")
 
         val isPersistent = prefs.isPersistentNotificationIsland.first()
-        if (!isMedia && !isPersistent) {
+        if (!isMedia && !isAlarm && progressPercent == null && !isPersistent) {
             val dismissJob = serviceScope.launch {
                 delay(5500L)
                 activeDynamicIslands.remove(sbn.key)
@@ -382,6 +405,47 @@ class DynamicNotificationService : NotificationListenerService() {
             }
             activeDismissJobs[sbn.key] = dismissJob
         }
+    }
+
+    private fun extractBestNotificationText(extras: android.os.Bundle): String {
+        val baseText = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim() ?: ""
+        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim() ?: ""
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val msgs = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+            if (!msgs.isNullOrEmpty()) {
+                val lastBundle = msgs.last() as? android.os.Bundle
+                val msgText = lastBundle?.getCharSequence("text")?.toString()?.trim()
+                val sender = lastBundle?.getCharSequence("sender")?.toString()?.trim()
+                if (!msgText.isNullOrBlank()) {
+                    return if (!sender.isNullOrBlank() && !msgText.startsWith(sender)) "$sender: $msgText" else msgText
+                }
+            }
+        }
+        val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
+        if (!lines.isNullOrEmpty()) {
+            val lastLine = lines.lastOrNull()?.toString()?.trim()
+            if (!lastLine.isNullOrBlank() && (baseText.isBlank() || baseText.contains("tin nhắn mới", true))) {
+                return lastLine
+            }
+        }
+        return if (bigText.length > baseText.length && baseText.isNotBlank()) bigText else baseText.ifBlank { bigText }
+    }
+
+    private fun extractProgressPercent(extras: android.os.Bundle): Int? {
+        val max = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0)
+        val progress = extras.getInt(Notification.EXTRA_PROGRESS, -1)
+        val indeterminate = extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false)
+        if (max > 0 && progress in 0..max && !indeterminate) {
+            return ((progress * 100f) / max).toInt().coerceIn(0, 100)
+        }
+        return null
+    }
+
+    private fun isAlarmNotification(sbn: StatusBarNotification): Boolean {
+        val notif = sbn.notification ?: return false
+        if (notif.category == Notification.CATEGORY_ALARM) return true
+        val pkg = sbn.packageName.lowercase()
+        return pkg in ALARM_PACKAGES && (notif.actions?.isNotEmpty() == true || notif.fullScreenIntent != null)
     }
 
     private fun isMessagingApp(sbn: StatusBarNotification): Boolean {
@@ -424,8 +488,14 @@ class DynamicNotificationService : NotificationListenerService() {
             "zalo", "orca", "messenger", "whatsapp", "telegram", "viber",
             "discord", "instagram", "mms", "messaging", "messages", "wechat", "line", "skype"
         )
+        private val ALARM_PACKAGES = setOf(
+            "com.android.deskclock",
+            "com.google.android.deskclock",
+            "com.miui.clock"
+        )
         private val MEDIA_KEYWORDS = listOf(
-            "spotify", "music", "zing", "youtube", "soundcloud", "apple", "audio", "podcast"
+            "spotify", "music", "zing", "youtube", "soundcloud", "apple", "audio", "podcast",
+            "tiktok", "netflix", "vlc", "mxtech", "bilibili", "video", "player"
         )
     }
 }

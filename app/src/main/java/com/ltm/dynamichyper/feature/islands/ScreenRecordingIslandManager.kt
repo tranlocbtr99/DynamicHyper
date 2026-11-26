@@ -17,7 +17,7 @@ import com.ltm.dynamichyper.core.FocusProtocolHelper
  */
 object ScreenRecordingIslandManager {
     private const val TAG = "DynamicHyper:Record"
-    const val RECORDING_NOTIFICATION_ID = 8888
+    const val RECORDING_NOTIFICATION_ID = 8886
     private const val PIC_RED_DOT = "screen_recording_dot"
 
     fun isScreenRecordingNotification(sbn: StatusBarNotification): Boolean {
@@ -69,6 +69,19 @@ object ScreenRecordingIslandManager {
                       "pic": "miui.focus.pic_$PIC_RED_DOT"
                     }
                   }
+                },
+                "baseInfo": {
+                  "type": 1,
+                  "picInfo": {
+                    "type": 1,
+                    "pic": "miui.focus.pic_$PIC_RED_DOT"
+                  },
+                  "title": "Đang quay màn hình",
+                  "content": "Nhấn để dừng hoặc xem chi tiết"
+                },
+                "iconTextInfo": {
+                  "title": "Đang quay màn hình",
+                  "content": "Nhấn để dừng hoặc xem chi tiết"
                 }
               },
               "isShowNotification": true
@@ -92,9 +105,11 @@ object ScreenRecordingIslandManager {
                 smallIconRes = R.drawable.ic_launcher_foreground,
                 jsonParam = jsonParam,
                 pics = pics,
-                isOngoing = true
+                isOngoing = true,
+                largeIcon = redDotBmp
             )
 
+            IdleIslandManager.setBlockerStatic("record", true)
             com.ltm.dynamichyper.core.FocusProtocolHelper.postNotificationSafely(context, RECORDING_NOTIFICATION_ID, notification)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to show recording island: ${e.message}")
@@ -107,7 +122,6 @@ object ScreenRecordingIslandManager {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to hide recording island: ${e.message}")
         }
-        // Tự động khôi phục Đảo Chờ ngay sau khi dừng quay màn hình
-        IdleIslandManager.reassertStatic()
+        IdleIslandManager.setBlockerStatic("record", false)
     }
 }

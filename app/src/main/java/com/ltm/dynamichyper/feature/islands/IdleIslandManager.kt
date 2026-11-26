@@ -19,6 +19,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import org.json.JSONObject
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Quản lý Đảo Chờ 24/7 (Idle Island) cho Dynamic Hyper.
@@ -44,7 +45,16 @@ class IdleIslandManager(
         @Volatile
         private var lastDispatchedWidgetText: String = ""
 
+        private val activeBlockers = ConcurrentHashMap.newKeySet<String>()
+
         fun getInstance(): IdleIslandManager? = instance
+
+        fun setBlockerStatic(tag: String, active: Boolean) {
+            if (active) activeBlockers.add(tag) else activeBlockers.remove(tag)
+            instance?.onBlockersChanged()
+        }
+
+        fun shouldSuppressIdle(): Boolean = activeBlockers.isNotEmpty() || NativeIslandTracker.hasFresh()
 
         fun reassertStatic() {
             instance?.reassert()
@@ -78,9 +88,9 @@ class IdleIslandManager(
 
         fun dispatchDirect(context: Context, width: Int, style: String = "minimal", force: Boolean = false) {
             try {
-                if (NativeIslandTracker.hasFresh()) {
+                if (shouldSuppressIdle()) {
                     val remaining = NativeIslandTracker.remainingYieldMs()
-                    Log.d(TAG, "Tạm hoãn Đảo Chờ: Đang nhường chỗ cho native island (${remaining}ms)")
+                    Log.d(TAG, "Tạm hoãn Đảo Chờ: blockers=$activeBlockers, nativeYield=${remaining}ms")
                     return
                 }
 
@@ -173,10 +183,16 @@ class IdleIslandManager(
                     priority = NotificationCompat.PRIORITY_HIGH,
                     contentIntent = contentIntent,
                     enablePromotedLiveUpdate = false,
-                    largeIcon = bigWidgetBmp
+                    largeIcon = bigWidgetBmp,
+                    keepIslandOnLockscreen = true
                 )
 
-                FocusProtocolHelper.postNotificationSafely(context, IDLE_ISLAND_ID, notification)
+                FocusProtocolHelper.postNotificationSafely(
+                    context = context,
+                    id = IDLE_ISLAND_ID,
+                    notification = notification,
+                    shouldCancel = { shouldSuppressIdle() }
+                )
                 AppLogger.i(TAG, "Đã gửi thông báo Đảo Chờ (style=$style, width=$effectiveWidth, clean=true)")
             } catch (e: Exception) {
                 Log.e(TAG, "Error direct dispatch: ${e.message}")
@@ -312,7 +328,7 @@ class IdleIslandManager(
                 delay(30 * 1000L)
                 try {
                     val style = prefs.idleIslandStyle.first()
-                    if (isShowing && activeEventCount <= 0 && (style == "battery_temp" || style == "ram_usage" || style == "weather")) {
+                    if (isShowing && !shouldSuppressIdle() && (style == "battery_temp" || style == "ram_usage" || style == "weather")) {
                         val width = prefs.idleIslandWidth.first()
                         dispatchDirect(context, width, style)
                     }
@@ -327,7 +343,7 @@ class IdleIslandManager(
             while (true) {
                 delay(15 * 60 * 1000L)
                 try {
-                    if (prefs.isIdleIslandEnabled.first() && activeEventCount <= 0) {
+                    if (prefs.isIdleIslandEnabled.first() && !shouldSuppressIdle()) {
                         val width = prefs.idleIslandWidth.first()
                         val style = prefs.idleIslandStyle.first()
                         dispatchDirect(context, width, style)
@@ -341,12 +357,19 @@ class IdleIslandManager(
 
     @Synchronized
     fun onEventCountChanged(count: Int) {
-        activeEventCount = count.coerceAtLeast(0)
-        Log.d(TAG, "onEventCountChanged: count=$activeEventCount, isEnabled=$isEnabled")
-        if (activeEventCount > 0) {
+        val active = count > 0
+        if (active) activeBlockers.add("notif") else activeBlockers.remove("notif")
+        onBlockersChanged()
+    }
+
+    @Synchronized
+    fun onBlockersChanged() {
+        val suppressed = shouldSuppressIdle()
+        Log.d(TAG, "onBlockersChanged: blockers=$activeBlockers, suppressed=$suppressed, isEnabled=$isEnabled")
+        if (suppressed) {
+            pendingJob?.cancel()
             hideIdleIsland(context)
             isShowing = false
-            pendingJob?.cancel()
         } else if (isEnabled) {
             reassert()
         }
@@ -354,10 +377,11 @@ class IdleIslandManager(
 
     fun updateStyleInternal(style: String) {
         pendingJob?.cancel()
+        if (shouldSuppressIdle()) return
         pendingJob = scope.launch {
             val width = prefs.idleIslandWidth.first()
             dispatchDirect(context, width, style, force = true)
-            isShowing = true
+            isShowing = !shouldSuppressIdle()
             Log.d(TAG, "Idle Island immediately updated to style: $style")
         }
     }
@@ -366,7 +390,7 @@ class IdleIslandManager(
         pendingJob?.cancel()
         pendingJob = scope.launch {
             delay(delayMs)
-            if (prefs.isIdleIslandEnabled.first() && activeEventCount <= 0) {
+            if (prefs.isIdleIslandEnabled.first() && !shouldSuppressIdle()) {
                 val width = prefs.idleIslandWidth.first()
                 val style = prefs.idleIslandStyle.first()
                 dispatchDirect(context, width, style, force = force)

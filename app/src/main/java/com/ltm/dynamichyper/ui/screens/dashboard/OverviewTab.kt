@@ -92,6 +92,7 @@ internal fun OverviewTabScreen(
     val idleIslandMode by prefs.idleIslandMode.collectAsState(initial = "compact")
     val isNotificationGradientGlow by prefs.isNotificationGradientGlow.collectAsState(initial = true)
     val isPersistentNotificationIsland by prefs.isPersistentNotificationIsland.collectAsState(initial = true)
+    val isHideOriginalNotification by prefs.isHideOriginalNotification.collectAsState(initial = false)
     val devicePreset by prefs.devicePreset.collectAsState(initial = "redmi_k")
     val isAutoStartMarked by prefs.isAutoStartMarked.collectAsState(initial = false)
 
@@ -889,6 +890,20 @@ internal fun OverviewTabScreen(
                     onCheckedChange = { checked ->
                         scope.launch {
                             prefs.setPersistentNotificationIsland(checked)
+                        }
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = GlassBorderSubtle)
+
+                GlassSettingItem(
+                    title = "Ẩn Thông Báo Gốc Khi Lên Đảo",
+                    subtitle = "Tự động ẩn thông báo tin nhắn gốc trên trung tâm thông báo sau khi đã đưa lên Đảo Động để tránh bị trùng lặp 2 thông báo.",
+                    checked = isHideOriginalNotification,
+                    onCheckedChange = { checked ->
+                        scope.launch {
+                            prefs.setHideOriginalNotification(checked)
                         }
                     }
                 )

@@ -95,6 +95,15 @@
             android:name=".feature.reply.InlineReplyService"
             android:exported="false" />
 
+        <activity
+            android:name=".feature.reply.InlineReplyActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:windowSoftInputMode="adjustResize|stateVisible"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- Invisible Activity for Island Tap -> Launches target app & restores Idle Island -->
         <activity
             android:name=".service.IslandTapActivity"
