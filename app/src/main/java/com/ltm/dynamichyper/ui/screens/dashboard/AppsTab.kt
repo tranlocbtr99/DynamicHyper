@@ -95,28 +95,47 @@ internal fun AppsTabScreen(
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             val pm = context.packageManager
-            val installed = try {
-                pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            } catch (_: Exception) {
-                emptyList<ApplicationInfo>()
-            }
+            val appInfoMap = LinkedHashMap<String, ApplicationInfo>()
 
-            val mapped = installed.map { info ->
-                val name = try {
-                    info.loadLabel(pm).toString()
-                } catch (_: Exception) {
-                    info.packageName
+            try {
+                for (info in pm.getInstalledApplications(PackageManager.GET_META_DATA)) {
+                    appInfoMap[info.packageName] = info
                 }
-                val isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-                ManagedAppItem(
-                    packageName = info.packageName,
-                    name = name.ifBlank { info.packageName },
-                    isSystemApp = isSystem
+            } catch (_: Exception) {}
+
+            val launcherPackages = HashSet<String>()
+            try {
+                val mainIntent = Intent(Intent.ACTION_MAIN, null).apply {
+                    addCategory(Intent.CATEGORY_LAUNCHER)
+                }
+                val resolveList = pm.queryIntentActivities(mainIntent, PackageManager.MATCH_ALL)
+                for (ri in resolveList) {
+                    val ai = ri.activityInfo?.applicationInfo ?: continue
+                    launcherPackages.add(ai.packageName)
+                    appInfoMap.putIfAbsent(ai.packageName, ai)
+                }
+            } catch (_: Exception) {}
+
+            val mapped = appInfoMap.values
+                .filter { it.packageName != context.packageName }
+                .map { info ->
+                    val name = try {
+                        info.loadLabel(pm).toString().trim()
+                    } catch (_: Exception) {
+                        info.packageName
+                    }
+                    val isPureSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0 &&
+                        (info.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0 &&
+                        !launcherPackages.contains(info.packageName)
+                    ManagedAppItem(
+                        packageName = info.packageName,
+                        name = name.ifBlank { info.packageName },
+                        isSystemApp = isPureSystem
+                    )
+                }.sortedWith(
+                    compareBy<ManagedAppItem> { it.isSystemApp }
+                        .thenBy { it.name.lowercase() }
                 )
-            }.sortedWith(
-                compareBy<ManagedAppItem> { it.isSystemApp }
-                    .thenBy { it.name.lowercase() }
-            )
 
             withContext(Dispatchers.Main) {
                 allApps = mapped
