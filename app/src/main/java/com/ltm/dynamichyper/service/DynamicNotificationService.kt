@@ -42,6 +42,7 @@ class DynamicNotificationService : NotificationListenerService() {
     private val lastNotificationContent = ConcurrentHashMap<String, String>()
     private val lastPostedTimestamp = ConcurrentHashMap<String, Long>()
     private val intentionallyRemovedKeys = ConcurrentHashMap<String, Long>()
+    private val activeNativeMediaKeys = ConcurrentHashMap.newKeySet<String>()
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -67,6 +68,7 @@ class DynamicNotificationService : NotificationListenerService() {
 
                 if (sbnKey != null) {
                     activeDynamicIslands.remove(sbnKey)
+                    intentionallyRemovedKeys.remove(sbnKey)
                     activeDismissJobs.remove(sbnKey)?.cancel()
                     lastNotificationContent.remove(sbnKey)
                     try {
@@ -74,6 +76,13 @@ class DynamicNotificationService : NotificationListenerService() {
                     } catch (_: Exception) {}
                 }
                 if (islandId != -1) {
+                    val siblingKeys = activeDynamicIslands.entries.filter { it.value == islandId }.map { it.key }
+                    for (k in siblingKeys) {
+                        activeDynamicIslands.remove(k)
+                        intentionallyRemovedKeys.remove(k)
+                        activeDismissJobs.remove(k)?.cancel()
+                        lastNotificationContent.remove(k)
+                    }
                     ShizukuEngine.clearPostedActiveId(islandId)
                     try {
                         NotificationManagerCompat.from(this@DynamicNotificationService).cancel(islandId)
@@ -143,13 +152,20 @@ class DynamicNotificationService : NotificationListenerService() {
         if (sbn.packageName == packageName) return
         AppLogger.d(TAG, "Bắt thông báo từ gói: ${sbn.packageName} (id=${sbn.id})")
 
-        // Nhường chỗ cho Native Island của hệ thống Xiaomi (Yield Policy)
+        // Nhường chỗ cho Native Island & Native MediaSession Island của hệ thống Xiaomi (Yield Policy)
+        val hasNativeMediaSession = sbn.notification.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true
+        if (hasNativeMediaSession) {
+            activeNativeMediaKeys.add(sbn.key)
+            IdleIslandManager.setBlockerStatic("native_media", true)
+            return
+        }
+
         val focusParam = sbn.notification.extras?.getString("miui.focus.param")
         if (focusParam != null) {
             val yieldMs = NativeIslandTracker.calculateYieldMs(
                 hasFocusParam = true,
                 focusParam = focusParam,
-                isMediaPlayer = sbn.notification.extras?.containsKey(Notification.EXTRA_MEDIA_SESSION) == true
+                isMediaPlayer = false
             )
             if (yieldMs != null) {
                 NativeIslandTracker.note(sbn.key, yieldMs)
@@ -229,16 +245,23 @@ class DynamicNotificationService : NotificationListenerService() {
                     }
                 }
                 else -> {
-                    val matchingKey = activeDynamicIslands.entries.firstOrNull { it.value == sbn.id }?.key
-                    if (matchingKey != null) {
-                        activeDynamicIslands.remove(matchingKey)
-                        activeDismissJobs.remove(matchingKey)?.cancel()
-                        lastNotificationContent.remove(matchingKey)
+                    val matchingKeys = activeDynamicIslands.entries.filter { it.value == sbn.id }.map { it.key }
+                    if (matchingKeys.isNotEmpty()) {
+                        for (k in matchingKeys) {
+                            activeDynamicIslands.remove(k)
+                            activeDismissJobs.remove(k)?.cancel()
+                            lastNotificationContent.remove(k)
+                            intentionallyRemovedKeys.remove(k)
+                        }
                         idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
                     }
                 }
             }
             return
+        }
+
+        if (activeNativeMediaKeys.remove(sbn.key)) {
+            IdleIslandManager.setBlockerStatic("native_media", activeNativeMediaKeys.isNotEmpty())
         }
 
         if (NativeIslandTracker.remove(sbn.key)) {
@@ -284,13 +307,22 @@ class DynamicNotificationService : NotificationListenerService() {
     private fun reconcileActiveIslandsAndRestoreIdle(forceReassert: Boolean = false) {
         try {
             val currentNotifs = try { activeNotifications } catch (_: Exception) { null } ?: return
-            val liveKeys = currentNotifs.filter { it.packageName != packageName }.map { it.key }.toSet()
+            val liveExternalKeys = currentNotifs.filter { it.packageName != packageName }.map { it.key }.toSet()
+            val liveOwnIds = currentNotifs.filter { it.packageName == packageName }.map { it.id }.toSet()
 
+            activeNativeMediaKeys.retainAll(liveExternalKeys)
+            IdleIslandManager.setBlockerStatic("native_media", activeNativeMediaKeys.isNotEmpty())
+
+            val now = System.currentTimeMillis()
             val iterator = activeDynamicIslands.entries.iterator()
             while (iterator.hasNext()) {
                 val (key, islandId) = iterator.next()
-                if (!liveKeys.contains(key) && !intentionallyRemovedKeys.containsKey(key)) {
+                val removedAt = intentionallyRemovedKeys[key]
+                val externalAlive = liveExternalKeys.contains(key)
+                val ownIslandAlive = liveOwnIds.contains(islandId) || (removedAt != null && now - removedAt < 2500L)
+                if ((!externalAlive && removedAt == null) || (removedAt != null && !ownIslandAlive)) {
                     iterator.remove()
+                    intentionallyRemovedKeys.remove(key)
                     activeDismissJobs.remove(key)?.cancel()
                     lastNotificationContent.remove(key)
                     ShizukuEngine.clearPostedActiveId(islandId)
@@ -358,10 +390,11 @@ class DynamicNotificationService : NotificationListenerService() {
         if (isSameContent && (isMedia || now - lastAt < 800L)) return
         lastPostedTimestamp[contentKey] = now
 
-        val isNewMessage = isMessaging && !isSameContent
+        val isNewMessage = !isSameContent && !isMedia
         lastNotificationContent[sbn.key] = contentKey
 
-        val dynamicIslandId = sbn.key.hashCode()
+        // Gom chung ID theo gói ứng dụng + người gửi/tiêu đề để cập nhật gọn trên 1 thẻ duy nhất, không đẻ nhiều thẻ trùng
+        val dynamicIslandId = "${sbn.packageName}|${title.ifBlank { sbn.key }}".hashCode()
         activeDynamicIslands[sbn.key] = dynamicIslandId
         activeDismissJobs.remove(sbn.key)?.cancel()
         idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
@@ -382,14 +415,8 @@ class DynamicNotificationService : NotificationListenerService() {
 
         FocusProtocolHelper.postNotificationSafely(this, dynamicIslandId, notification, scope = serviceScope)
 
-        if (isNewMessage && prefs.isHideOriginalNotification.first()) {
-            try {
-                intentionallyRemovedKeys[sbn.key] = System.currentTimeMillis()
-                cancelNotification(sbn.key)
-            } catch (e: Exception) {
-                intentionallyRemovedKeys.remove(sbn.key)
-                Log.w("DynamicNotif", "Không thể cancelNotification: ${e.message}")
-            }
+        if (!sbn.isOngoing && !isMedia && !isAlarm && progressPercent == null && prefs.isHideOriginalNotification.first()) {
+            cancelOriginalAndEmptyGroupSummary(sbn)
         }
         AppLogger.i(TAG, "Đã gửi thông báo Focus cho ${sbn.packageName} (id=$dynamicIslandId, media=$isMedia, alarm=$isAlarm)")
 
@@ -405,6 +432,41 @@ class DynamicNotificationService : NotificationListenerService() {
                 idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
             }
             activeDismissJobs[sbn.key] = dismissJob
+        }
+    }
+
+    private fun cancelOriginalAndEmptyGroupSummary(sbn: StatusBarNotification) {
+        val now = System.currentTimeMillis()
+        try {
+            intentionallyRemovedKeys[sbn.key] = now
+            cancelNotification(sbn.key)
+        } catch (e: Exception) {
+            intentionallyRemovedKeys.remove(sbn.key)
+            Log.w("DynamicNotif", "Không thể cancelNotification: ${e.message}")
+            return
+        }
+
+        // Nếu app gốc (Zalo, Messenger, Telegram...) có thông báo tóm tắt nhóm (FLAG_GROUP_SUMMARY)
+        // mà không còn thông báo con nào khác, xóa luôn thẻ summary để không bị trùng trên Trung tâm thông báo
+        val group = sbn.notification?.group
+        if (!group.isNullOrBlank()) {
+            try {
+                val current = activeNotifications ?: return
+                val sameGroup = current.filter {
+                    it.packageName == sbn.packageName &&
+                        it.key != sbn.key &&
+                        it.notification?.group == group
+                }
+                val hasOtherChildren = sameGroup.any {
+                    (it.notification.flags and Notification.FLAG_GROUP_SUMMARY) == 0
+                }
+                if (!hasOtherChildren) {
+                    for (summary in sameGroup) {
+                        intentionallyRemovedKeys[summary.key] = now
+                        cancelNotification(summary.key)
+                    }
+                }
+            } catch (_: Exception) {}
         }
     }
 

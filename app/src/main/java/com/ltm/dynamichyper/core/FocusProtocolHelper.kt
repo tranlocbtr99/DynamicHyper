@@ -203,7 +203,7 @@ object FocusProtocolHelper {
             .setOnlyAlertOnce(onlyAlertOnce)
             .setSilent(isSilent)
 
-        if (enablePromotedLiveUpdate) {
+        if (needsNativeLiveUpdateFallback) {
             val shortCritical = buildShortCriticalText(title, content)
             builder.setRequestPromotedOngoing(true)
             builder.setShortCriticalText(shortCritical)

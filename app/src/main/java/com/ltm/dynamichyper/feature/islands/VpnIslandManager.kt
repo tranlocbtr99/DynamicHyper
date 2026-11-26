@@ -95,7 +95,7 @@ class VpnIslandManager(private val context: Context) {
                 "ticker": "VPN Đang Hoạt Động",
                 "timeout": 86400000,
                 "enableFloat": false,
-                "isShowNotification": true,
+                "isShowNotification": false,
                 "islandFirstFloat": true,
                 "reopen": true,
                 "param_island": {
@@ -129,7 +129,7 @@ class VpnIslandManager(private val context: Context) {
                   }
                 }
               },
-              "isShowNotification": true
+              "isShowNotification": false
             }
             """.trimIndent()
 

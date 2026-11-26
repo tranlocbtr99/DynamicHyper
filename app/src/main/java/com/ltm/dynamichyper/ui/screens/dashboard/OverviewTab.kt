@@ -92,7 +92,7 @@ internal fun OverviewTabScreen(
     val idleIslandMode by prefs.idleIslandMode.collectAsState(initial = "compact")
     val isNotificationGradientGlow by prefs.isNotificationGradientGlow.collectAsState(initial = true)
     val isPersistentNotificationIsland by prefs.isPersistentNotificationIsland.collectAsState(initial = true)
-    val isHideOriginalNotification by prefs.isHideOriginalNotification.collectAsState(initial = false)
+    val isHideOriginalNotification by prefs.isHideOriginalNotification.collectAsState(initial = true)
     val devicePreset by prefs.devicePreset.collectAsState(initial = "redmi_k")
     val isAutoStartMarked by prefs.isAutoStartMarked.collectAsState(initial = false)
 

@@ -37,7 +37,7 @@ object ScreenRecordingIslandManager {
                 "ticker": "Đang quay màn hình",
                 "timeout": 1440,
                 "enableFloat": true,
-                "isShowNotification": true,
+                "isShowNotification": false,
                 "islandFirstFloat": true,
                 "reopen": true,
                 "param_island": {
@@ -84,7 +84,7 @@ object ScreenRecordingIslandManager {
                   "content": "Nhấn để dừng hoặc xem chi tiết"
                 }
               },
-              "isShowNotification": true
+              "isShowNotification": false
             }
             """.trimIndent()
 

@@ -296,7 +296,7 @@ class ChargingIslandManager(
         paramV2.put("ticker", titleText)
         paramV2.put("timeout", 86400000)
         paramV2.put("enableFloat", true)
-        paramV2.put("isShowNotification", true)
+        paramV2.put("isShowNotification", false)
         paramV2.put("islandFirstFloat", true)
         paramV2.put("reopen", true)
 
@@ -366,7 +366,7 @@ class ChargingIslandManager(
         paramV2.put("iconTextInfo", iconTextInfo)
 
         root.put("param_v2", paramV2)
-        root.put("isShowNotification", true)
+        root.put("isShowNotification", false)
 
         val jsonParam = root.toString()
 

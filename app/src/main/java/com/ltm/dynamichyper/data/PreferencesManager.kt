@@ -43,7 +43,7 @@ class PreferencesManager(private val context: Context) {
         val KEY_PERSISTENT_NOTIFICATION_ISLAND = booleanPreferencesKey("persistent_notification_island")
         val KEY_CALL_ISLAND_ENABLED = booleanPreferencesKey("call_island_enabled")
         val KEY_BLOCK_FULLSCREEN_CALL = booleanPreferencesKey("block_fullscreen_call")
-        val KEY_HIDE_ORIGINAL_NOTIFICATION = booleanPreferencesKey("hide_original_notification")
+        val KEY_HIDE_ORIGINAL_NOTIFICATION = booleanPreferencesKey("hide_original_notification_v2")
 
         // Exact Bank Information: Techcombank - Tran Minh Loc - 4444444790
         val KEY_BANK_NAME = stringPreferencesKey("bank_name")
@@ -109,7 +109,7 @@ class PreferencesManager(private val context: Context) {
     val isPersistentNotificationIsland: Flow<Boolean> = context.dataStore.data.map { it[KEY_PERSISTENT_NOTIFICATION_ISLAND] ?: true }
     val isCallIslandEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_CALL_ISLAND_ENABLED] ?: true }
     val isBlockFullscreenCall: Flow<Boolean> = context.dataStore.data.map { it[KEY_BLOCK_FULLSCREEN_CALL] ?: true }
-    val isHideOriginalNotification: Flow<Boolean> = context.dataStore.data.map { it[KEY_HIDE_ORIGINAL_NOTIFICATION] ?: false }
+    val isHideOriginalNotification: Flow<Boolean> = context.dataStore.data.map { it[KEY_HIDE_ORIGINAL_NOTIFICATION] ?: true }
 
     suspend fun setHideOriginalNotification(enabled: Boolean) {
         context.dataStore.edit { it[KEY_HIDE_ORIGINAL_NOTIFICATION] = enabled }

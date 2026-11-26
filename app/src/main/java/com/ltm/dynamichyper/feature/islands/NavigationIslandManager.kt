@@ -46,7 +46,7 @@ object NavigationIslandManager {
             paramV2.put("ticker", "$title: $content")
             paramV2.put("timeout", 86400000)
             paramV2.put("enableFloat", false)
-            paramV2.put("isShowNotification", true)
+            paramV2.put("isShowNotification", false)
             paramV2.put("islandFirstFloat", false)
             paramV2.put("reopen", true)
 
@@ -98,7 +98,7 @@ object NavigationIslandManager {
                 put("content", content.ifBlank { "Đang dẫn đường..." })
             })
             root.put("param_v2", paramV2)
-            root.put("isShowNotification", true)
+            root.put("isShowNotification", false)
 
             val navBmp = Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888).apply {
                 val canvas = Canvas(this)
