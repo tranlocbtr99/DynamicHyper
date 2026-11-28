@@ -9,13 +9,19 @@ import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
 
 /**
- * Móc nối trực tiếp vào Binder hệ thống (IConnectivityManager / INetworkManagementService)
- * thông qua ShizukuBinderWrapper để điều khiển quy tắc tường lửa (OEM_DENY_CHAIN = 9 / 3)
- * của HyperOS, giúp bypass cơ chế kiểm duyệt chữ ký trực tuyến của AuthManager trên ROM Trung Quốc.
+ * Móc nối trực tiếp vào Binder hệ thống (IConnectivityManager / INetworkManagementService /
+ * INetworkPolicyManager / IActivityManager) thông qua ShizukuBinderWrapper để:
+ * 1. Khóa tường lửa đa chuỗi (`OEM_DENY_CHAIN = 9`, `FIREWALL_CHAIN_STANDBY = 3`)
+ * 2. Ghi chính sách cấm mạng nền bền vững xuống `/data/system/netpolicy.xml` qua `INetworkPolicyManager`
+ * 3. Buộc dừng (`forceStopPackage`) tiến trình `com.xiaomi.xmsf` để đóng mọi kết nối TCP đang mở,
+ *    đảm bảo Đảo Động vẫn hoạt động 24/7 ngay cả khi người dùng tắt hoàn toàn Tùy chọn nhà phát triển.
  */
 object ShizukuHook {
     private const val TAG = "DynamicHyper:ShizukuHook"
     private const val OEM_DENY_CHAIN = 9
+    private const val STANDBY_DENY_CHAIN = 3
+    private const val POLICY_NONE = 0
+    private const val POLICY_REJECT_METERED_BACKGROUND = 1
 
     private data class ServiceBackend(
         val serviceName: String,
@@ -40,90 +46,123 @@ object ShizukuHook {
 
     fun setPackageNetworkingEnabled(uid: Int, enabled: Boolean): Boolean {
         val rule = if (enabled) 0 else 2
+        val chains = listOf(OEM_DENY_CHAIN, STANDBY_DENY_CHAIN)
+        var anySuccess = false
         val failures = mutableListOf<String>()
 
+        // 1. Khóa qua IConnectivityManager trên cả Chain 9 (OEM_DENY) và Chain 3 (STANDBY)
         try {
             val cm = getHookedConnectivityManager()
-            if (!enabled) {
-                cm.javaClass.getMethod("setFirewallChainEnabled", Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
-                    .invoke(cm, OEM_DENY_CHAIN, true)
-                Log.d(TAG, "Enabled firewall chain $OEM_DENY_CHAIN via typed IConnectivityManager before blocking uid=$uid")
+            for (chain in chains) {
+                try {
+                    if (!enabled) {
+                        cm.javaClass.getMethod("setFirewallChainEnabled", Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
+                            .invoke(cm, chain, true)
+                    }
+                    cm.javaClass.getMethod("setUidFirewallRule", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+                        .invoke(cm, chain, uid, rule)
+                    anySuccess = true
+                    Log.d(TAG, "Firewall chain $chain ${if (enabled) "restored" else "blocked"} for uid=$uid via IConnectivityManager")
+                } catch (_: Throwable) {}
             }
-            cm.javaClass.getMethod("setUidFirewallRule", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
-                .invoke(cm, OEM_DENY_CHAIN, uid, rule)
-            Log.d(TAG, "Network ${if (enabled) "restored" else "blocked"} for uid=$uid via typed IConnectivityManager")
-            return true
         } catch (t: Throwable) {
-            val detail = "Typed IConnectivityManager failed: ${t.message}"
-            failures += detail
-            Log.w(TAG, detail, t)
+            failures += "IConnectivityManager: ${t.message}"
         }
 
+        // 2. Khóa qua INetworkManagementService trên cả Chain 9 và Chain 3
         try {
             val nm = getHookedNetworkManagementService()
-            if (!enabled) {
-                nm.javaClass.getMethod("setFirewallChainEnabled", Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
-                    .invoke(nm, OEM_DENY_CHAIN, true)
-                Log.d(TAG, "Enabled firewall chain $OEM_DENY_CHAIN via typed INetworkManagementService before blocking uid=$uid")
+            for (chain in chains) {
+                try {
+                    if (!enabled) {
+                        nm.javaClass.getMethod("setFirewallChainEnabled", Int::class.javaPrimitiveType, Boolean::class.javaPrimitiveType)
+                            .invoke(nm, chain, true)
+                    }
+                    try {
+                        nm.javaClass.getMethod("setUidFirewallRule", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+                            .invoke(nm, chain, uid, rule)
+                    } catch (_: Throwable) {
+                        nm.javaClass.getMethod("setFirewallUidRule", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
+                            .invoke(nm, chain, uid, rule)
+                    }
+                    anySuccess = true
+                    Log.d(TAG, "Firewall chain $chain ${if (enabled) "restored" else "blocked"} for uid=$uid via INetworkManagementService")
+                } catch (_: Throwable) {}
             }
-            try {
-                nm.javaClass.getMethod("setUidFirewallRule", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
-                    .invoke(nm, OEM_DENY_CHAIN, uid, rule)
-                Log.d(TAG, "Network ${if (enabled) "restored" else "blocked"} for uid=$uid via typed INetworkManagementService.setUidFirewallRule")
-            } catch (_: Throwable) {
-                nm.javaClass.getMethod("setFirewallUidRule", Int::class.javaPrimitiveType, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType)
-                    .invoke(nm, OEM_DENY_CHAIN, uid, rule)
-                Log.d(TAG, "Network ${if (enabled) "restored" else "blocked"} for uid=$uid via typed INetworkManagementService.setFirewallUidRule")
-            }
-            return true
         } catch (t: Throwable) {
-            val detail = "Typed INetworkManagementService failed: ${t.message}"
-            failures += detail
-            Log.w(TAG, detail, t)
+            failures += "INetworkManagementService: ${t.message}"
         }
 
-        for (backend in serviceBackends) {
-            try {
-                val service = getHookedService(backend)
-                Log.d(TAG, "Trying ${backend.label} backend for uid=$uid, enabled=$enabled")
+        // 3. Ghi bền vững xuống /data/system/netpolicy.xml qua INetworkPolicyManager
+        try {
+            val netPolicy = getHookedService(
+                ServiceBackend(
+                    serviceName = "netpolicy",
+                    stubClassName = "android.net.INetworkPolicyManager\$Stub",
+                    label = "NetworkPolicyManager"
+                )
+            )
+            val policy = if (enabled) POLICY_NONE else POLICY_REJECT_METERED_BACKGROUND
+            callMethodResilient(netPolicy, listOf("setUidPolicy"), uid, policy)
+            anySuccess = true
+            Log.d(TAG, "Persistent netpolicy setUidPolicy(uid=$uid, policy=$policy) succeeded")
+        } catch (t: Throwable) {
+            failures += "INetworkPolicyManager: ${t.message}"
+        }
 
-                if (!enabled) {
+        // 4. Fallback resilient method discovery nếu chưa thành công
+        if (!anySuccess) {
+            for (backend in serviceBackends) {
+                try {
+                    val service = getHookedService(backend)
+                    if (!enabled) {
+                        callMethodResilient(service, listOf("setFirewallChainEnabled"), OEM_DENY_CHAIN, true)
+                    }
                     callMethodResilient(
                         service,
-                        listOf("setFirewallChainEnabled"),
+                        listOf("setUidFirewallRule", "setFirewallUidRule"),
                         OEM_DENY_CHAIN,
-                        true
+                        uid,
+                        rule
                     )
-                    Log.d(TAG, "Enabled firewall chain $OEM_DENY_CHAIN via ${backend.label} before blocking uid=$uid")
+                    anySuccess = true
+                    break
+                } catch (t: Throwable) {
+                    failures += "${backend.label}: ${t.message}"
                 }
-
-                val methodUsed = callMethodResilient(
-                    service,
-                    listOf("setUidFirewallRule", "setFirewallUidRule"),
-                    OEM_DENY_CHAIN,
-                    uid,
-                    rule
-                )
-                Log.d(
-                    TAG,
-                    "Network ${if (enabled) "restored" else "blocked"} for uid=$uid via ${backend.label}.$methodUsed"
-                )
-                return true
-            } catch (t: Throwable) {
-                val available = summarizeFirewallMethods(backend)
-                val detail = buildString {
-                    append("${backend.label} failed: ${t.message}")
-                    if (available.isNotBlank()) {
-                        append(" | available=$available")
-                    }
-                }
-                failures += detail
-                Log.w(TAG, detail, t)
             }
         }
 
-        Log.e(TAG, "No compatible firewall backend found for uid=$uid. ${failures.joinToString(" || ")}")
-        return false
+        // 5. Nếu đang khóa (enabled = false), buộc dừng ngay tiến trình com.xiaomi.xmsf qua IActivityManager
+        if (!enabled) {
+            forceStopPackageViaBinder("com.xiaomi.xmsf")
+        }
+
+        if (!anySuccess) {
+            Log.e(TAG, "No compatible firewall backend found for uid=$uid. ${failures.joinToString(" || ")}")
+        }
+        return anySuccess
+    }
+
+    /**
+     * Buộc dừng gói ứng dụng trực tiếp qua IActivityManager Binder (đóng lập tức mọi socket mạng đang mở).
+     */
+    fun forceStopPackageViaBinder(packageName: String): Boolean {
+        return try {
+            val am = getHookedService(
+                ServiceBackend(
+                    serviceName = Context.ACTIVITY_SERVICE,
+                    stubClassName = "android.app.IActivityManager\$Stub",
+                    label = "ActivityManager"
+                )
+            )
+            callMethodResilient(am, listOf("forceStopPackage"), packageName, 0)
+            Log.d(TAG, "✓ forceStopPackage($packageName) via IActivityManager binder succeeded")
+            true
+        } catch (t: Throwable) {
+            Log.w(TAG, "forceStopPackageViaBinder($packageName) failed: ${t.message}")
+            false
+        }
     }
 
     private fun getHookedConnectivityManager(): Any {
@@ -211,6 +250,8 @@ object ShizukuHook {
                     else -> throw IllegalArgumentException("Unsupported arg $arg for boolean parameter")
                 }
 
+                String::class.java -> arg.toString()
+
                 else -> if (expected.isInstance(arg)) arg
                 else throw IllegalArgumentException("Arg $arg does not match ${expected.name}")
             }
@@ -221,21 +262,5 @@ object ShizukuHook {
         } catch (e: InvocationTargetException) {
             throw e.targetException ?: e
         }
-    }
-
-    private fun summarizeFirewallMethods(backend: ServiceBackend): String {
-        return runCatching {
-            val service = getHookedService(backend)
-            service.javaClass.methods
-                .filter { method ->
-                    method.name.contains("Firewall", ignoreCase = true) ||
-                        method.name.contains("firewall", ignoreCase = true)
-                }
-                .sortedWith(compareBy({ it.name }, { it.parameterCount }))
-                .joinToString("; ") { method ->
-                    val params = method.parameterTypes.joinToString(",") { it.simpleName }
-                    "${method.name}($params)"
-                }
-        }.getOrElse { "" }
     }
 }

@@ -12,10 +12,15 @@ import rikka.shizuku.Shizuku
 
 /**
  * Điều phối quyền hạn cấp cao qua Shizuku.
- * Hỗ trợ cơ chế "Cấp 1 Lần — Hoạt Động Độc Lập": Sau khi đã chạy tối ưu hóa & khóa mạng XMSF 1 lần,
- * các luật tường lửa (OEM_DENY_CHAIN, netpolicy restrict-background-blacklist, AppOps) được lưu trong
- * system_server của Android nên ứng dụng vẫn hiển thị Đảo Động 24/7 kể cả khi người dùng tắt hoàn toàn
- * Gỡ lỗi không dây (Wireless Debugging) và dừng Shizuku.
+ * Hỗ trợ cơ chế "Cấp 1 Lần — Hoạt Động Độc Lập Ngay Cả Khi Tắt Tùy Chọn Nhà Phát Triển":
+ * - Sửa lỗi `Shizuku.newProcess` (dùng `getDeclaredMethod` cho phương thức private static trong Shizuku API 13.1.5
+ *   kèm fallback qua `IShizukuService.newProcess` trực tiếp).
+ * - Khóa mạng và đóng băng tiến trình `com.xiaomi.xmsf` ở cả 4 tầng (RAM Firewall Chain 9 & Chain 3,
+ *   Persistent `/data/system/netpolicy.xml`, Persistent `/data/system/appops.xml`, Standby Bucket `restricted`
+ *   và `am force-stop com.xiaomi.xmsf`).
+ * - Nhờ các chính sách này được Android lưu trực tiếp trong `system_server` và trên đĩa `/data/system/`,
+ *   ngay cả khi người dùng tắt hoàn toàn Gỡ lỗi không dây và tắt luôn công tắc "Tùy chọn nhà phát triển",
+ *   `com.xiaomi.xmsf` vẫn bị chặn kết nối máy chủ (-300) và Đảo Động vẫn hoạt động 24/7!
  */
 object ShizukuEngine {
     private const val TAG = "DynamicHyper:Shizuku"
@@ -86,9 +91,6 @@ object ShizukuEngine {
 
     /**
      * Kiểm tra xem máy đã từng được kích hoạt tối ưu hóa 1-chạm qua Shizuku hay chưa.
-     * Lưu ý: Các quyền AppOps (10008, 10020, 10033), POST_PROMOTED_NOTIFICATIONS, deviceidle whitelist,
-     * notification_focus_protocol và netpolicy restrict-background-blacklist đều được Android lưu
-     * bền vững trong /data/system/ ngay cả khi tắt Shizuku.
      */
     fun isOneTimeOptimizationActive(context: Context): Boolean {
         if (hasShizukuPermission()) return true
@@ -102,7 +104,6 @@ object ShizukuEngine {
 
     /**
      * Kiểm tra xem lần kích hoạt Shizuku gần nhất có nằm trong cùng chu kỳ khởi động máy (cùng BOOT_COUNT) hay không.
-     * Trong cùng chu kỳ boot, cả rule OEM_DENY_CHAIN trong RAM của ConnectivityService lẫn netpolicy trên đĩa đều còn nguyên.
      */
     fun isIsolatedInCurrentBoot(context: Context): Boolean {
         return try {
@@ -125,16 +126,28 @@ object ShizukuEngine {
     }
 
     /**
-     * Thực thi lệnh shell thông qua Shizuku Process an toàn
+     * Thực thi lệnh shell thông qua Shizuku Process an toàn.
+     * LƯU Ý QUAN TRỌNG: Trong `rikka.shizuku:api:13.1.5`, hàm `Shizuku.newProcess` có phạm vi `private static`,
+     * do đó BẮT BUỘC phải dùng `getDeclaredMethod("newProcess", ...)` với `isAccessible = true`
+     * (thay vì `getMethod` vốn chỉ tìm hàm public và gây lỗi NoSuchMethodException trên Android 17).
      */
     fun execCommand(command: String): Pair<Int, String> {
         return try {
-            val method = Shizuku::class.java.getMethod(
-                "newProcess",
-                Array<String>::class.java,
-                Array<String>::class.java,
-                String::class.java
-            )
+            val method = try {
+                Shizuku::class.java.getDeclaredMethod(
+                    "newProcess",
+                    Array<String>::class.java,
+                    Array<String>::class.java,
+                    String::class.java
+                )
+            } catch (_: NoSuchMethodException) {
+                Shizuku::class.java.getMethod(
+                    "newProcess",
+                    Array<String>::class.java,
+                    Array<String>::class.java,
+                    String::class.java
+                )
+            }
             method.isAccessible = true
             val process = method.invoke(null, arrayOf("sh", "-c", command), null, null) as Process
             val output = StringBuilder()
@@ -144,18 +157,27 @@ object ShizukuEngine {
                     output.append(line).append("\n")
                 }
             }
+            val errOutput = StringBuilder()
+            process.errorStream.bufferedReader().use { reader ->
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    errOutput.append(line).append("\n")
+                }
+            }
             val exitCode = process.waitFor()
             process.destroy()
-            Pair(exitCode, output.toString().trim())
+            val combinedOut = if (output.isNotEmpty()) output.toString().trim() else errOutput.toString().trim()
+            Pair(exitCode, combinedOut)
         } catch (e: Throwable) {
-            Log.e(TAG, "Failed to exec: $command", e)
-            Pair(-1, e.message ?: "Unknown error")
+            val rootCause = (e as? java.lang.reflect.InvocationTargetException)?.targetException ?: e
+            Log.e(TAG, "Failed to exec: $command", rootCause)
+            Pair(-1, rootCause.message ?: e.javaClass.simpleName)
         }
     }
 
     /**
      * Tự động áp dụng toàn bộ tối ưu hóa HyperOS chỉ với 1-chạm.
-     * Sau khi hàm này chạy xong, người dùng có thể tắt Gỡ lỗi không dây (Wireless Debugging) và tắt Shizuku.
+     * Sau khi hàm này chạy xong, người dùng có thể tắt Gỡ lỗi không dây và tắt cả Tùy chọn nhà phát triển.
      */
     fun applyOneTouchOptimizations(context: Context): Boolean {
         val packageName = context.packageName
@@ -165,7 +187,6 @@ object ShizukuEngine {
             "cmd notification allow_listener $packageName/com.ltm.dynamichyper.service.DynamicNotificationService",
             "dumpsys deviceidle whitelist +$packageName",
             "setprop persist.sys.feature.island true",
-            "resetprop persist.sys.feature.island true",
             "settings put system notification_focus_protocol $targetProtocol",
             "cmd appops set $packageName AUTO_START allow",
             "cmd appops set $packageName RUN_IN_BACKGROUND allow",
@@ -190,7 +211,7 @@ object ShizukuEngine {
             if (code == 0) {
                 successCount++
             } else {
-                AppLogger.w(TAG, "Bỏ qua lệnh không chạy được trên ROM này: $cmd (exit=$code ${out.take(80)})")
+                AppLogger.w(TAG, "Bỏ qua lệnh không hỗ trợ trên ROM này: $cmd (exit=$code ${out.take(80)})")
             }
         }
 
@@ -199,22 +220,22 @@ object ShizukuEngine {
             markOneTimeActivated(context)
             AppLogger.i(
                 TAG,
-                "✓ Đã kích hoạt Chế độ Độc Lập 1-Chạm ($successCount lệnh, khóa XMSF=$xmsfOk). " +
-                    "Có thể tắt Wireless Debugging & Shizuku mà Đảo vẫn hiển thị 24/7!"
+                "✓ Đã kích hoạt Chế độ Độc Lập 1-Chạm ($successCount/${commands.size} lệnh thành công, khóa XMSF=$xmsfOk). " +
+                    "Có thể tắt Tùy chọn nhà phát triển & Shizuku mà Đảo vẫn hiển thị 24/7!"
             )
         }
         return successCount > 0 || xmsfOk
     }
 
     /**
-     * Khóa mạng vĩnh viễn cho com.xiaomi.xmsf qua 4 tầng hệ thống:
-     * 1. ShizukuHook IPC (ConnectivityManager / NetworkManagementService OEM_DENY_CHAIN)
-     * 2. Connectivity shell chain-3 & package-networking-enabled false
-     * 3. NetworkPolicy restrict-background-blacklist (lưu bền vững trong /data/system/netpolicy.xml)
-     * 4. AppOps RUN_IN_BACKGROUND & RUN_ANY_IN_BACKGROUND ignore + force-stop
+     * Khóa mạng và đóng băng vĩnh viễn tiến trình `com.xiaomi.xmsf` qua 4 tầng hệ thống:
+     * 1. ShizukuHook IPC (`IConnectivityManager`, `INetworkManagementService` Chain 9 & Chain 3, `INetworkPolicyManager`, `IActivityManager.forceStopPackage`)
+     * 2. Connectivity shell chain-3 & `set-package-networking-enabled false com.xiaomi.xmsf`
+     * 3. NetworkPolicy `restrict-background-blacklist` (lưu bền vững trong `/data/system/netpolicy.xml`)
+     * 4. AppOps `RUN_IN_BACKGROUND`, `RUN_ANY_IN_BACKGROUND`, `WAKE_LOCK` -> `ignore` + `set-standby-bucket restricted` + `am force-stop`
      *
-     * TUYỆT ĐỐI KHÔNG mở lại mạng cho XMSF sau khi gửi thông báo, giúp hiệu lực khóa duy trì
-     * ngay cả khi người dùng đã tắt hoàn toàn Shizuku và Wireless Debugging.
+     * Nhờ cả 4 tầng đều ghi xuống `/data/system/` và giết sạch socket đang mở của XMSF,
+     * ngay cả khi người dùng tắt Tùy chọn nhà phát triển (Developer Options), XMSF không thể thức dậy xóa Đảo!
      */
     fun applyXmsfBypass(context: Context): Boolean {
         try {
@@ -227,35 +248,36 @@ object ShizukuEngine {
                 return true
             }
 
-            var anySuccess = false
-
-            // 1. Hook IPC ShizukuBinderWrapper trực tiếp
+            var ipcSuccess = false
+            // 1. Hook IPC ShizukuBinderWrapper trực tiếp (Chain 9 + Chain 3 + INetworkPolicyManager + forceStopPackage)
             try {
                 if (ShizukuHook.setPackageNetworkingEnabled(xmsfUid, false)) {
-                    AppLogger.i(TAG, "✓ Đã khóa mạng XMSF vĩnh viễn qua ShizukuHook IPC (uid=$xmsfUid)")
-                    anySuccess = true
+                    ipcSuccess = true
                 }
             } catch (e: Throwable) {
-                AppLogger.w(TAG, "ShizukuHook IPC thất bại, tiếp tục shell fallback: ${e.message}")
+                AppLogger.w(TAG, "ShizukuHook IPC cảnh báo: ${e.message}")
             }
 
-            // 2. Shell fallback đa tầng bền vững: connectivity chain3 + netpolicy blacklist + appops + force-stop
+            // 2. Thực thi bộ lệnh Shell lưu bền vững xuống đĩa (/data/system/netpolicy.xml & appops.xml)
             val (c1, _) = execCommand("cmd connectivity set-chain3-enabled true")
             val (c2, _) = execCommand("cmd connectivity set-package-networking-enabled false com.xiaomi.xmsf")
             val (cNet, _) = execCommand("cmd netpolicy add restrict-background-blacklist $xmsfUid")
-            execCommand("cmd appops set com.xiaomi.xmsf RUN_IN_BACKGROUND ignore")
-            execCommand("cmd appops set com.xiaomi.xmsf RUN_ANY_IN_BACKGROUND ignore")
-            execCommand("am force-stop com.xiaomi.xmsf")
+            val (cBg1, _) = execCommand("cmd appops set com.xiaomi.xmsf RUN_IN_BACKGROUND ignore")
+            val (cBg2, _) = execCommand("cmd appops set com.xiaomi.xmsf RUN_ANY_IN_BACKGROUND ignore")
+            execCommand("cmd appops set com.xiaomi.xmsf WAKE_LOCK ignore")
+            execCommand("am set-standby-bucket com.xiaomi.xmsf restricted")
+            val (cStop, _) = execCommand("am force-stop com.xiaomi.xmsf")
 
-            if (c1 == 0 || c2 == 0 || cNet == 0) {
-                AppLogger.i(TAG, "✓ Đã khóa mạng XMSF vĩnh viễn qua Shell & NetPolicy (uid=$xmsfUid)")
-                anySuccess = true
-            }
-
-            if (anySuccess) {
+            val shellSuccess = (c1 == 0 || c2 == 0 || cNet == 0 || cBg1 == 0 || cBg2 == 0)
+            if (ipcSuccess || shellSuccess) {
                 markOneTimeActivated(context)
+                AppLogger.i(
+                    TAG,
+                    "✓ Đã khóa cứng XMSF đa tầng (uid=$xmsfUid, IPC=$ipcSuccess, Chain3=${c1 == 0}, " +
+                        "PkgNet=${c2 == 0}, NetPolicy=${cNet == 0}, AppOps=${cBg1 == 0}, ForceStop=${cStop == 0})"
+                )
+                return true
             }
-            return anySuccess
         } catch (e: Throwable) {
             AppLogger.e(TAG, "Lỗi khi chạy applyXmsfBypass: ${e.message}", e)
         }
@@ -288,18 +310,12 @@ object ShizukuEngine {
     }
 
     /**
-     * Thu hồi toàn bộ quyền đã cấp & khôi phục trạng thái hệ thống nguyên bản bằng 1 nút bấm duy nhất:
-     * - Mở lại mạng cho com.xiaomi.xmsf (xóa khỏi restrict-background-blacklist, bật lại package-networking)
-     * - Khôi phục quyền USE_FULL_SCREEN_INTENT cho Zalo/Messenger/Telegram/WhatsApp
-     * - Đặt lại các AppOps MIUI (10008, 10020, 10021, 10033, AUTO_START, SYSTEM_ALERT_WINDOW) về default/ignore
-     * - Gỡ khỏi deviceidle whitelist, thu hồi NotificationListener & runtime permissions (POST_NOTIFICATIONS, BLUETOOTH_CONNECT)
-     * - Xóa trạng thái kích hoạt 1 lần và hủy toàn bộ thông báo Đảo đang hiển thị
+     * Thu hồi toàn bộ quyền đã cấp & khôi phục trạng thái hệ thống nguyên bản bằng 1 nút bấm duy nhất.
      */
     fun revokeAllGrantedPermissions(context: Context): Boolean {
         val packageName = context.packageName
         var usedShizuku = false
 
-        // 1. Hủy toàn bộ thông báo Đảo hiện tại và xóa cờ kích hoạt 1 lần
         try {
             NotificationManagerCompat.from(context).cancelAll()
             postedActiveIds.clear()
@@ -310,7 +326,6 @@ object ShizukuEngine {
                 .apply()
         } catch (_: Throwable) {}
 
-        // 2. Nếu có Shizuku: tự động thu hồi toàn bộ quyền hệ thống & khôi phục XMSF qua shell/IPC
         if (hasShizukuPermission()) {
             usedShizuku = true
             try {
@@ -324,10 +339,11 @@ object ShizukuEngine {
                     execCommand("cmd netpolicy remove restrict-background-blacklist $xmsfUid")
                     execCommand("cmd appops set com.xiaomi.xmsf RUN_IN_BACKGROUND allow")
                     execCommand("cmd appops set com.xiaomi.xmsf RUN_ANY_IN_BACKGROUND allow")
+                    execCommand("cmd appops set com.xiaomi.xmsf WAKE_LOCK allow")
+                    execCommand("am set-standby-bucket com.xiaomi.xmsf active")
                 }
             } catch (_: Throwable) {}
 
-            // Khôi phục full screen call cho các app nhắn tin
             blockAllFullScreenCalls(false)
 
             val revokeCommands = listOf(
@@ -348,7 +364,6 @@ object ShizukuEngine {
             AppLogger.i(TAG, "✓ Đã thu hồi toàn bộ quyền hệ thống & khôi phục XMSF nguyên bản qua Shizuku")
         }
 
-        // 3. Thu hồi tự động trên Android 13+ (API 33+) bằng Context.revokeSelfPermissionsOnKill
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             try {
                 context.revokeSelfPermissionsOnKill(
@@ -365,19 +380,16 @@ object ShizukuEngine {
 
     /**
      * Gửi thông báo Đảo Tiêu Điểm an toàn:
-     * - Nếu Shizuku đang bật: Đảm bảo XMSF đã bị khóa vĩnh viễn (ensureXmsfBlocked) và TUYỆT ĐỐI KHÔNG mở lại mạng,
-     *   sau đó bắn thông báo ngay lập tức.
-     * - Nếu Shizuku đã tắt (người dùng đã tắt Wireless Debugging): Bắn thẳng thông báo với độ trễ 0ms.
-     *   Nhờ luật khóa XMSF không bị mở lại ở lần gửi trước, system_server vẫn giữ trạng thái khóa XMSF
-     *   và cho phép Đảo hiển thị bình thường!
+     * - Khi Shizuku đang bật: Nếu là lần đầu trong phiên (`!XmsfNetworkHelper.isBlockedInCurrentSession`),
+     *   chạy ngay `applyXmsfBypass(context)` để khóa cả 4 tầng (RAM + Disk `/data/system/` + `force-stop` XMSF)
+     *   để chuẩn bị sẵn sàng cho việc người dùng tắt Tùy chọn nhà phát triển bất cứ lúc nào.
+     * - Khi người dùng đã tắt Tùy chọn nhà phát triển (`!hasShizukuPermission()`): Bắn trực tiếp 0ms,
+     *   dựa trên chính sách khóa bền vững đã ghi xuống `/data/system/` từ trước.
      */
     suspend fun postNotificationSafely(context: Context, id: Int, notification: Notification) {
         val isOnlyAlertOnce = (notification.flags and Notification.FLAG_ONLY_ALERT_ONCE) != 0
         val alreadyActive = postedActiveIds.contains(id)
 
-        // Cơ chế In-Place Update của HyperBridge:
-        // Khi một notificationId đã được đăng lên thanh trạng thái rồi và lần gọi này chỉ là cập nhật tại chỗ
-        // (onlyAlertOnce = true), SystemUI cập nhật thẳng nội dung Đảo mà không gọi lại AuthManager/XMSF.
         if (alreadyActive && isOnlyAlertOnce && XmsfNetworkHelper.isBlockedInCurrentSession) {
             NotificationManagerCompat.from(context).notify(id, notification)
             IslandProbe.track(context, id, "in-place update (0ms, XMSF đã khóa)")
@@ -389,7 +401,11 @@ object ShizukuEngine {
             val hasXmsf = RomDiagnostics.isXmsfInstalled(context)
             if (hasShizukuPermission()) {
                 val isolated = if (hasXmsf) {
-                    XmsfNetworkHelper.ensureXmsfBlocked(context)
+                    if (!XmsfNetworkHelper.isBlockedInCurrentSession) {
+                        applyXmsfBypass(context)
+                    } else {
+                        XmsfNetworkHelper.ensureXmsfBlocked(context)
+                    }
                 } else {
                     true
                 }
@@ -403,25 +419,23 @@ object ShizukuEngine {
                 Log.d(TAG, "✓ Đã bắn Focus Notification thành công (id=$id, keepBlocked=true)")
                 path = when {
                     !hasXmsf -> "direct (máy không có XMSF)"
-                    isolated -> "đã khóa XMSF vĩnh viễn (Shizuku đang bật)"
+                    isolated -> "đã khóa XMSF đa tầng bền vững (Shizuku đang bật)"
                     else -> "cách ly XMSF FAILED"
                 }
             } else {
-                // Shizuku đã tắt (người dùng đã tắt Wireless Debugging) hoặc máy chưa cài Shizuku -> Bắn trực tiếp 0ms
                 NotificationManagerCompat.from(context).notify(id, notification)
                 postedActiveIds.add(id)
                 val sameBoot = isIsolatedInCurrentBoot(context)
                 val everActivated = isOneTimeOptimizationActive(context)
-                Log.d(TAG, "✓ Đã bắn Focus Notification ở chế độ độc lập / Hybrid LiveUpdate (id=$id, sameBoot=$sameBoot, ever=$everActivated)")
+                Log.d(TAG, "✓ Đã bắn Focus Notification ở chế độ độc lập (id=$id, sameBoot=$sameBoot, ever=$everActivated)")
                 path = when {
                     !hasXmsf -> "direct (máy không có XMSF)"
-                    sameBoot -> "chế độ độc lập (XMSF đã khóa từ trước, Shizuku tắt)"
+                    sameBoot -> "chế độ độc lập (XMSF đã khóa đa tầng, Tùy chọn nhà phát triển / Shizuku đã tắt)"
                     everActivated -> "chế độ độc lập sau khởi động lại (NetPolicy/AppOps, Shizuku tắt)"
                     else -> "hybrid Focus + Android 16 Promoted LiveUpdate (chưa từng kích hoạt Shizuku)"
                 }
             }
         }
-        // Dò xem đảo có sống sót sau khi gửi không
         IslandProbe.track(context, id, path)
     }
 }

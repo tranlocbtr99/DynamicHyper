@@ -2,11 +2,13 @@ package com.ltm.dynamichyper.core
 
 import android.app.NotificationManager
 import android.content.Context
+import com.ltm.dynamichyper.feature.islands.BluetoothIslandManager
 import com.ltm.dynamichyper.feature.islands.CallIslandManager
 import com.ltm.dynamichyper.feature.islands.ChargingIslandManager
 import com.ltm.dynamichyper.feature.islands.DebuggingIslandManager
 import com.ltm.dynamichyper.feature.islands.IdleIslandManager
 import com.ltm.dynamichyper.feature.islands.NavigationIslandManager
+import com.ltm.dynamichyper.feature.islands.RingerIslandManager
 import com.ltm.dynamichyper.feature.islands.ScreenRecordingIslandManager
 import com.ltm.dynamichyper.feature.islands.VpnIslandManager
 import kotlinx.coroutines.CoroutineScope
@@ -67,6 +69,8 @@ object IslandProbe {
         FocusProtocolHelper.TEST_ISLAND_ID -> "đảo test"
         CallIslandManager.CALL_ISLAND_ID -> "cuộc gọi/quay màn hình"
         ChargingIslandManager.CHARGING_NOTIFICATION_ID -> "sạc pin"
+        RingerIslandManager.RINGER_NOTIFICATION_ID -> "chế độ âm thanh"
+        BluetoothIslandManager.BLUETOOTH_NOTIFICATION_ID -> "tai nghe bluetooth"
         VpnIslandManager.VPN_NOTIFICATION_ID -> "VPN"
         NavigationIslandManager.NAV_ISLAND_ID -> "dẫn đường"
         DebuggingIslandManager.DEBUGGING_ISLAND_ID -> "gỡ lỗi"
@@ -85,12 +89,12 @@ object IslandProbe {
                 delay(CHECK_EARLY_MS)
                 val early = inspect(app, id) ?: return@launch
                 if (early != State.ALIVE) {
-                    report(id, label, early, CHECK_EARLY_MS, path)
+                    report(app, id, label, early, CHECK_EARLY_MS, path)
                     return@launch
                 }
                 delay(CHECK_FINAL_MS - CHECK_EARLY_MS)
                 val final = inspect(app, id) ?: return@launch
-                report(id, label, final, CHECK_FINAL_MS, path)
+                report(app, id, label, final, CHECK_FINAL_MS, path)
             } catch (_: kotlinx.coroutines.CancellationException) {
                 _stats.update { it.copy(superseded = it.superseded + 1) }
             }
@@ -110,7 +114,11 @@ object IslandProbe {
         null
     }
 
-    private fun report(id: Int, label: String, state: State, afterMs: Long, path: String) {
+    private fun report(context: Context, id: Int, label: String, state: State, afterMs: Long, path: String) {
+        // Nếu đảo chờ bị ẩn do người dùng hoặc do có blocker hợp lệ thì không tính là lỗi bị hệ thống xóa
+        if (id == IdleIslandManager.IDLE_ISLAND_ID && state == State.GONE && IdleIslandManager.shouldSuppressIdle()) {
+            return
+        }
         val previous = lastState.put(id, state)
         val secs = String.format("%.1fs", afterMs / 1000f)
         _stats.update {
@@ -122,21 +130,29 @@ object IslandProbe {
         }
         when (state) {
             State.ALIVE -> {
-                // INFO lần đầu hoặc khi vừa hồi phục; còn lại chỉ DEBUG để không làm ngập nhật ký.
                 val msg = "[$label] id=$id sau $secs: thông báo còn tồn tại kèm dữ liệu đảo " +
                     "(chưa chắc đã được vẽ) • đường gửi: $path"
                 if (previous == null || previous != State.ALIVE) AppLogger.i(TAG, msg) else AppLogger.d(TAG, msg)
             }
-            State.STRIPPED -> AppLogger.w(
-                TAG,
-                "[$label] id=$id sau $secs: thông báo còn nhưng MẤT dữ liệu đảo ($FOCUS_EXTRA bị gỡ) — " +
-                    "hệ thống đã loại phần đảo • đường gửi: $path. " + suspectedCause(path)
-            )
-            State.GONE -> AppLogger.w(
-                TAG,
-                "[$label] id=$id sau $secs: thông báo BỊ XÓA khỏi danh sách đang hoạt động • " +
-                    "đường gửi: $path. " + suspectedCause(path)
-            )
+            State.STRIPPED, State.GONE -> {
+                val statusDesc = if (state == State.STRIPPED) {
+                    "thông báo còn nhưng MẤT dữ liệu đảo ($FOCUS_EXTRA bị gỡ)"
+                } else {
+                    "thông báo BỊ XÓA khỏi danh sách đang hoạt động"
+                }
+                AppLogger.w(
+                    TAG,
+                    "[$label] id=$id sau $secs: $statusDesc • đường gửi: $path. ${suspectedCause(path)}"
+                )
+                // Tự động khóa lại XMSF và khôi phục Đảo Chờ ngay nếu phát hiện XMSF vừa lọt lưới xóa đảo
+                if (ShizukuEngine.hasShizukuPermission() && RomDiagnostics.isXmsfInstalled(context)) {
+                    AppLogger.i(TAG, "Phát hiện Đảo bị xóa -> Tự động tái khóa cứng & force-stop XMSF ngay lập tức...")
+                    ShizukuEngine.applyXmsfBypass(context)
+                }
+                if (id == IdleIslandManager.IDLE_ISLAND_ID && !IdleIslandManager.shouldSuppressIdle()) {
+                    IdleIslandManager.reassertStatic(force = true, delayMs = 300L)
+                }
+            }
         }
     }
 
