@@ -94,6 +94,7 @@ internal fun OverviewTabScreen(
     val isPersistentNotificationIsland by prefs.isPersistentNotificationIsland.collectAsState(initial = true)
     val isHideOriginalNotification by prefs.isHideOriginalNotification.collectAsState(initial = true)
     val isSuppressChatBubble by prefs.isSuppressChatBubble.collectAsState(initial = true)
+    val isIslandSoundEnabled by prefs.isIslandSoundEnabled.collectAsState(initial = true)
     val devicePreset by prefs.devicePreset.collectAsState(initial = "redmi_k")
     val isAutoStartMarked by prefs.isAutoStartMarked.collectAsState(initial = false)
 
@@ -946,6 +947,22 @@ internal fun OverviewTabScreen(
                         }
                     }
                 )
+
+                if (isHideOriginalNotification) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider(color = GlassBorderSubtle)
+
+                    GlassSettingItem(
+                        title = "Giữ Âm Thanh & Rung Thông Báo Gốc",
+                        subtitle = "Cho phép Zalo, Messenger và các ứng dụng phát trọn vẹn tiếng chuông & nhịp rung (1.2s) trước khi tự động ẩn thông báo gốc (Không ảnh hưởng nhạc chuông cuộc gọi).",
+                        checked = isIslandSoundEnabled,
+                        onCheckedChange = { checked ->
+                            scope.launch {
+                                prefs.setIslandSoundEnabled(checked)
+                            }
+                        }
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(10.dp))
                 HorizontalDivider(color = GlassBorderSubtle)

@@ -98,6 +98,9 @@ object OtaUpdateManager {
                             break
                         }
                     }
+                    if (downloadUrl.isBlank()) {
+                        downloadUrl = "https://raw.githubusercontent.com/$GITHUB_REPO/main/release/DynamicHyper-v${tagName.removePrefix("v")}.apk"
+                    }
                 }
 
                 val hasNewer = isNewerVersion(curVer, tagName)
@@ -108,10 +111,37 @@ object OtaUpdateManager {
                     changelog = body
                 )
             } else {
-                null
+                checkRawVersionFallback(curVer)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to check update: ${e.message}")
+            null
+        }
+    }
+
+    private fun checkRawVersionFallback(curVer: String): UpdateInfo? {
+        return try {
+            val url = URL("https://raw.githubusercontent.com/$GITHUB_REPO/main/version.json")
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 6000
+                readTimeout = 6000
+            }
+            if (conn.responseCode == 200) {
+                val json = conn.inputStream.bufferedReader().use { it.readText() }
+                val obj = JsonParser.parseString(json).asJsonObject
+                val latest = obj.get("version")?.asString?.removePrefix("v") ?: return null
+                val dl = obj.get("downloadUrl")?.asString
+                    ?: "https://raw.githubusercontent.com/$GITHUB_REPO/main/release/DynamicHyper-v$latest.apk"
+                val notes = obj.get("changelog")?.asString ?: "Cập nhật hiệu năng và tính năng mới."
+                UpdateInfo(
+                    hasUpdate = isNewerVersion(curVer, latest),
+                    latestVersion = latest,
+                    downloadUrl = dl,
+                    changelog = notes
+                )
+            } else null
+        } catch (_: Throwable) {
             null
         }
     }

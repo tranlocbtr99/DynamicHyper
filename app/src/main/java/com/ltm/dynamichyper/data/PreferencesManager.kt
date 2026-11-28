@@ -47,6 +47,7 @@ class PreferencesManager(private val context: Context) {
         val KEY_BLOCK_FULLSCREEN_CALL = booleanPreferencesKey("block_fullscreen_call")
         val KEY_HIDE_ORIGINAL_NOTIFICATION = booleanPreferencesKey("hide_original_notification_v2")
         val KEY_SUPPRESS_CHAT_BUBBLE = booleanPreferencesKey("suppress_chat_bubble")
+        val KEY_ISLAND_SOUND_ENABLED = booleanPreferencesKey("island_sound_enabled")
 
         // Exact Bank Information: Techcombank - Tran Minh Loc - 4444444790
         val KEY_BANK_NAME = stringPreferencesKey("bank_name")
@@ -116,6 +117,7 @@ class PreferencesManager(private val context: Context) {
     val isBlockFullscreenCall: Flow<Boolean> = context.dataStore.data.map { it[KEY_BLOCK_FULLSCREEN_CALL] ?: true }
     val isHideOriginalNotification: Flow<Boolean> = context.dataStore.data.map { it[KEY_HIDE_ORIGINAL_NOTIFICATION] ?: true }
     val isSuppressChatBubble: Flow<Boolean> = context.dataStore.data.map { it[KEY_SUPPRESS_CHAT_BUBBLE] ?: true }
+    val isIslandSoundEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_ISLAND_SOUND_ENABLED] ?: true }
 
     suspend fun setHideOriginalNotification(enabled: Boolean) {
         context.dataStore.edit { it[KEY_HIDE_ORIGINAL_NOTIFICATION] = enabled }
@@ -123,6 +125,10 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setSuppressChatBubble(enabled: Boolean) {
         context.dataStore.edit { it[KEY_SUPPRESS_CHAT_BUBBLE] = enabled }
+    }
+
+    suspend fun setIslandSoundEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_ISLAND_SOUND_ENABLED] = enabled }
     }
 
     // Aliases

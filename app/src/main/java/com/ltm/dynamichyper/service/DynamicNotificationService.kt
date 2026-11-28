@@ -43,6 +43,7 @@ class DynamicNotificationService : NotificationListenerService() {
 
     private val activeDynamicIslands = ConcurrentHashMap<String, Int>()
     private val activeDismissJobs = ConcurrentHashMap<String, Job>()
+    private val pendingOriginalCancelJobs = ConcurrentHashMap<String, Job>()
     private val lastNotificationContent = ConcurrentHashMap<String, String>()
     private val lastContentPerSender = ConcurrentHashMap<String, String>()
     private val lastSenderTimestamp = ConcurrentHashMap<String, Long>()
@@ -493,14 +494,23 @@ class DynamicNotificationService : NotificationListenerService() {
         activeDismissJobs.remove(sbn.key)?.cancel()
         idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
 
-        // QUY TẮC CHỐNG TRÙNG LẶP TRÊN TRUNG TÂM THÔNG BÁO VÀ CHỐNG VÒNG LẶP BONG BÓNG CHAT:
+        // QUY TẮC CHỐNG TRÙNG LẶP TRÊN TRUNG TÂM THÔNG BÁO, GIỮ ÂM THANH GỐC & BẢO VỆ CUỘC GỌI 100%:
+        // - Bảo vệ 3 lớp cho Cuộc gọi: Nếu thông báo có CATEGORY_CALL, fullScreenIntent hoặc là CallNotification
+        //   thì TUYỆT ĐỐI KHÔNG BAO GIỜ gọi cancelNotification!
         // - Nếu thông báo gốc là Bubble (`isBubbleAttached == true`): TUYỆT ĐỐI KHÔNG gọi `cancelNotification(sbn.key)`
         //   vì nếu xóa thông báo của Bubble đang mở, Messenger sẽ lập tức re-post lại 9 lần/giây!
-        // - Chỉ hiện thẻ Focus trong Trung tâm thông báo (`showInNotificationShade = true`) khi thông báo gốc THỰC SỰ được ẩn (`willCancelOriginal == true`)
-        //   hoặc khi là Báo thức. Nếu thông báo gốc vẫn còn trên Trung tâm thông báo (`!hideOriginal` hoặc `isBubbleAttached`),
-        //   đặt `showInNotificationShade = false` để thẻ Focus chỉ hiện trên viên thuốc Đảo Động, KHÔNG BAO GIỜ đẻ thêm thẻ thứ 2 trên Trung tâm thông báo!
-        val willCancelOriginal = !sbn.isOngoing && !isMedia && !isAlarm && progressPercent == null && hideOriginal && !isBubbleAttached
+        val isCallOrFullScreen = notif.category == Notification.CATEGORY_CALL ||
+            notif.fullScreenIntent != null ||
+            CallIslandManager.isCallNotification(sbn)
+        val willCancelOriginal = !sbn.isOngoing &&
+            !isCallOrFullScreen &&
+            !isMedia &&
+            !isAlarm &&
+            progressPercent == null &&
+            hideOriginal &&
+            !isBubbleAttached
         val showInNotificationShade = willCancelOriginal || isAlarm
+        val preserveOriginalSound = prefs.isIslandSoundEnabled.first()
 
         val notification = NotificationPayloadBuilder.buildAppFocusNotification(
             context = this,
@@ -520,9 +530,24 @@ class DynamicNotificationService : NotificationListenerService() {
         FocusProtocolHelper.postNotificationSafely(this, dynamicIslandId, notification, scope = serviceScope)
 
         if (willCancelOriginal) {
-            cancelOriginalAndEmptyGroupSummary(sbn)
+            pendingOriginalCancelJobs.remove(sbn.key)?.cancel()
+            if (preserveOriginalSound && isNewMessage) {
+                // Đánh dấu trước vào intentionallyRemovedKeys để bộ lọc Group Summary biết thông báo con sắp được ẩn,
+                // sau đó chờ đúng 1200ms cho Android NotificationPlayer & Vibrator phát trọn vẹn 100% tiếng chuông
+                // và nhịp rung đặc trưng của Zalo/Messenger rồi mới rút thông báo gốc khỏi Trung tâm thông báo!
+                intentionallyRemovedKeys[sbn.key] = now
+                pendingOriginalCancelJobs[sbn.key] = serviceScope.launch {
+                    delay(1200L)
+                    pendingOriginalCancelJobs.remove(sbn.key)
+                    if (!callIslandManager.isCallActive && !CallIslandManager.isCallNotification(sbn)) {
+                        cancelOriginalAndEmptyGroupSummary(sbn, forceCancel = true)
+                    }
+                }
+            } else {
+                cancelOriginalAndEmptyGroupSummary(sbn, forceCancel = true)
+            }
         }
-        AppLogger.i(TAG, "Đã gửi thông báo Focus cho ${sbn.packageName} (id=$dynamicIslandId, media=$isMedia, bubble=$isBubbleAttached, shade=$showInNotificationShade)")
+        AppLogger.i(TAG, "Đã gửi thông báo Focus cho ${sbn.packageName} (id=$dynamicIslandId, media=$isMedia, bubble=$isBubbleAttached, sound=$preserveOriginalSound)")
 
         // Cơ chế collapseToAppropriateState cho thông báo:
         // Sau khi thông báo bung Đảo lớn xong (5.5s), tự động nhả blocker "notif" để Đảo Chờ 24/7 luôn sống;
@@ -550,12 +575,11 @@ class DynamicNotificationService : NotificationListenerService() {
         }
     }
 
-    private fun cancelOriginalAndEmptyGroupSummary(sbn: StatusBarNotification) {
+    private fun cancelOriginalAndEmptyGroupSummary(sbn: StatusBarNotification, forceCancel: Boolean = false) {
         val now = System.currentTimeMillis()
         val lastRemoved = intentionallyRemovedKeys[sbn.key] ?: 0L
         intentionallyRemovedKeys[sbn.key] = now
-        // Nếu vừa mới gọi cancelNotification(sbn.key) trong vòng 350ms (do Messenger bắn burst x2-x4), không gọi lặp lại
-        if (now - lastRemoved < 350L) return
+        if (!forceCancel && now - lastRemoved < 350L) return
         try {
             cancelNotification(sbn.key)
         } catch (e: Exception) {

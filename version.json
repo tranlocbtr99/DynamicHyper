@@ -1,0 +1,6 @@
+{
+  "version": "2.5.0",
+  "versionCode": 69,
+  "downloadUrl": "https://raw.githubusercontent.com/tranlocbtr99/DynamicHyper/main/release/DynamicHyper-v2.5.0.apk",
+  "changelog": "• Đảo Chờ 24/7 trên cả Màn hình khóa & Màn hình chính\n• Đảo Sạc tự ẩn sau 6s trả về Đảo Chờ 24/7\n• Khóa XMSF đa tầng bền vững kể cả khi tắt Tùy chọn nhà phát triển\n• Giữ trọn vẹn âm thanh & nhịp rung thông báo gốc (bảo vệ 100% chuông cuộc gọi)\n• Chặn thông báo Bong bóng chat lặp lại & sửa lỗi trùng lặp thông báo Zalo\n• Bổ sung Đảo Chuông/Rung/Im lặng, Đảo Tai nghe Bluetooth kèm % pin & Nút Thu Hồi Quyền 1-Chạm"
+}
