@@ -399,7 +399,7 @@ class DynamicNotificationService : NotificationListenerService() {
                 intentionallyRemovedKeys.entries.any { it.key.contains("|${sbn.packageName}|") && now - it.value < 5000L }
 
             if (hasLiveChild || hasActiveIslandForPkg || isMessagingApp(sbn)) {
-                if (hideOriginal && !hasLiveChild) {
+                if (hideOriginal && !hasLiveChild && !isDeviceLockedOrScreenOff()) {
                     // Thông báo con vừa được ẩn, xóa luôn thẻ Group Summary mồ côi của Zalo/Messenger để không bị trùng trên Trung tâm thông báo
                     try {
                         intentionallyRemovedKeys[sbn.key] = now
@@ -476,7 +476,7 @@ class DynamicNotificationService : NotificationListenerService() {
         if (isSameContentByKey && (isMedia || now - lastAt < 1500L)) return
         if (isSameContentBySender && (isBubbleAttached || now - lastAt < 15000L)) {
             // Nếu Zalo/Messenger gửi thông báo thứ 2 có cùng nội dung tin nhắn đó mà KHÔNG phải Bubble -> ẩn thông báo gốc trùng lặp rồi thoát
-            if (hideOriginal && !isBubbleAttached && !sbn.isOngoing) {
+            if (hideOriginal && !isBubbleAttached && !sbn.isOngoing && !isDeviceLockedOrScreenOff()) {
                 cancelOriginalAndEmptyGroupSummary(sbn)
             }
             return
@@ -502,14 +502,19 @@ class DynamicNotificationService : NotificationListenerService() {
         val isCallOrFullScreen = notif.category == Notification.CATEGORY_CALL ||
             notif.fullScreenIntent != null ||
             CallIslandManager.isCallNotification(sbn)
+        // Khi máy đang khoá / màn hình tắt: GIỮ NGUYÊN thông báo gốc để nó hiện trên màn hình khoá
+        // với âm thanh, rung và quyền lockscreen của chính app gốc (tránh lỡ thông báo).
+        val lockedNow = isDeviceLockedOrScreenOff()
         val willCancelOriginal = !sbn.isOngoing &&
             !isCallOrFullScreen &&
             !isMedia &&
             !isAlarm &&
             progressPercent == null &&
             hideOriginal &&
-            !isBubbleAttached
+            !isBubbleAttached &&
+            !lockedNow
         val showInNotificationShade = willCancelOriginal || isAlarm
+        AppLogger.i(TAG, "Notif ${sbn.packageName}: locked=$lockedNow, cancelOriginal=$willCancelOriginal, shade=$showInNotificationShade")
         val preserveOriginalSound = prefs.isIslandSoundEnabled.first()
 
         val notification = NotificationPayloadBuilder.buildAppFocusNotification(
@@ -558,7 +563,8 @@ class DynamicNotificationService : NotificationListenerService() {
                 delay(5500L)
                 activeDynamicIslands.remove(sbn.key)
                 activeDismissJobs.remove(sbn.key)
-                if (!isPersistent) {
+                // Nếu thẻ gốc đã bị ẩn thì thẻ Focus là bản DUY NHẤT của tin nhắn → không được huỷ
+                if (!isPersistent && !willCancelOriginal) {
                     intentionallyRemovedKeys.remove(sbn.key)
                     val stillReferenced = activeDynamicIslands.values.any { it == dynamicIslandId }
                     if (!stillReferenced) {
@@ -573,6 +579,15 @@ class DynamicNotificationService : NotificationListenerService() {
             }
             activeDismissJobs[sbn.key] = dismissJob
         }
+    }
+
+    private fun isDeviceLockedOrScreenOff(): Boolean {
+        val interactive = try {
+            (getSystemService(POWER_SERVICE) as? android.os.PowerManager)?.isInteractive ?: true
+        } catch (_: Exception) { true }
+        return !interactive ||
+            IdleIslandManager.isPhoneLocked ||
+            FocusProtocolHelper.isKeyguardLocked(this)
     }
 
     private fun cancelOriginalAndEmptyGroupSummary(sbn: StatusBarNotification, forceCancel: Boolean = false) {
