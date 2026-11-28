@@ -93,6 +93,7 @@ internal fun OverviewTabScreen(
     val isNotificationGradientGlow by prefs.isNotificationGradientGlow.collectAsState(initial = true)
     val isPersistentNotificationIsland by prefs.isPersistentNotificationIsland.collectAsState(initial = true)
     val isHideOriginalNotification by prefs.isHideOriginalNotification.collectAsState(initial = true)
+    val isSuppressChatBubble by prefs.isSuppressChatBubble.collectAsState(initial = true)
     val devicePreset by prefs.devicePreset.collectAsState(initial = "redmi_k")
     val isAutoStartMarked by prefs.isAutoStartMarked.collectAsState(initial = false)
 
@@ -942,6 +943,20 @@ internal fun OverviewTabScreen(
                     onCheckedChange = { checked ->
                         scope.launch {
                             prefs.setHideOriginalNotification(checked)
+                        }
+                    }
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = GlassBorderSubtle)
+
+                GlassSettingItem(
+                    title = "Tắt Thông Báo Bong Bóng Chat Lặp Lại",
+                    subtitle = "Chặn bong bóng chat (Messenger, Zalo) tự phát lại thông báo liên tục khi đang mở hoặc kéo bong bóng trên màn hình.",
+                    checked = isSuppressChatBubble,
+                    onCheckedChange = { checked ->
+                        scope.launch {
+                            prefs.setSuppressChatBubble(checked)
                         }
                     }
                 )

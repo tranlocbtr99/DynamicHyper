@@ -44,6 +44,8 @@ class DynamicNotificationService : NotificationListenerService() {
     private val activeDynamicIslands = ConcurrentHashMap<String, Int>()
     private val activeDismissJobs = ConcurrentHashMap<String, Job>()
     private val lastNotificationContent = ConcurrentHashMap<String, String>()
+    private val lastContentPerSender = ConcurrentHashMap<String, String>()
+    private val lastSenderTimestamp = ConcurrentHashMap<String, Long>()
     private val lastPostedTimestamp = ConcurrentHashMap<String, Long>()
     private val intentionallyRemovedKeys = ConcurrentHashMap<String, Long>()
     private val activeNativeMediaKeys = ConcurrentHashMap.newKeySet<String>()
@@ -373,8 +375,11 @@ class DynamicNotificationService : NotificationListenerService() {
 
     private suspend fun handleIncomingNotification(sbn: StatusBarNotification) {
         val notif = sbn.notification ?: return
+        val now = System.currentTimeMillis()
+        val hideOriginal = prefs.isHideOriginalNotification.first()
+        val suppressBubble = prefs.isSuppressChatBubble.first()
 
-        // Lọc Group Summary
+        // 1. Lọc & Dọn dẹp Group Summary (đặc biệt cho Zalo & Messenger để không còn thẻ bóng ma trùng lặp trên Trung tâm thông báo)
         if ((notif.flags and Notification.FLAG_GROUP_SUMMARY) != 0) {
             val group = notif.group
             val hasLiveChild = if (!group.isNullOrBlank()) {
@@ -387,7 +392,21 @@ class DynamicNotificationService : NotificationListenerService() {
                     } == true
                 } catch (_: Exception) { false }
             } else false
-            if (hasLiveChild) return
+
+            // Nếu đây là thẻ Group Summary của ứng dụng nhắn tin (Zalo, Messenger...) hoặc đã có thông báo con đang được xử lý trên Đảo
+            val hasActiveIslandForPkg = activeDynamicIslands.keys.any { it.contains("|${sbn.packageName}|") } ||
+                intentionallyRemovedKeys.entries.any { it.key.contains("|${sbn.packageName}|") && now - it.value < 5000L }
+
+            if (hasLiveChild || hasActiveIslandForPkg || isMessagingApp(sbn)) {
+                if (hideOriginal && !hasLiveChild) {
+                    // Thông báo con vừa được ẩn, xóa luôn thẻ Group Summary mồ côi của Zalo/Messenger để không bị trùng trên Trung tâm thông báo
+                    try {
+                        intentionallyRemovedKeys[sbn.key] = now
+                        cancelNotification(sbn.key)
+                    } catch (_: Exception) {}
+                }
+                return
+            }
         }
 
         val extras = notif.extras ?: return
@@ -407,6 +426,30 @@ class DynamicNotificationService : NotificationListenerService() {
         if (title.isBlank() && text.isBlank()) return
         if (title.equals(sbn.packageName, ignoreCase = true) || text.equals(sbn.packageName, ignoreCase = true)) return
 
+        // 2. Chặn tuyệt đối thông báo dịch vụ "Bong bóng chat đang hoạt động" (Chat heads active)
+        if (isChatHeadServiceStatusNotification(sbn, title, text)) {
+            return
+        }
+
+        // 3. Nhận diện thông báo gắn với cửa sổ Bong bóng chat (Android Bubble FLAG_BUBBLE / bubbleMetadata / Messenger id 20000..20999)
+        val isBubbleAttached = isBubbleAttachedNotification(sbn)
+        if (isBubbleAttached && suppressBubble) {
+            // Khi bật "Tắt Thông Báo Bong Bóng Chat Lặp Lại":
+            // Nếu đây là thông báo Bubble container phụ của Messenger (id in 20000..20999) hoặc bong bóng đang mở trên màn hình,
+            // hoặc nội dung của người gửi này đã được hiển thị trên Đảo rồi -> BỎ QUA 100% và KHÔNG gọi cancelNotification!
+            val senderKey = "${sbn.packageName}|$title"
+            val lastTextForSender = lastContentPerSender[senderKey]
+            val lastTimeForSender = lastSenderTimestamp[senderKey] ?: 0L
+            val isMessengerSecondaryBubble = (sbn.packageName == "com.facebook.orca" && sbn.id in 20000..20999)
+            val isBubbleExpandedOrSuppressed = try {
+                notif.bubbleMetadata?.isNotificationSuppressed == true || notif.bubbleMetadata?.autoExpandBubble == true
+            } catch (_: Throwable) { false }
+
+            if (isBubbleExpandedOrSuppressed || lastTextForSender == text || (isMessengerSecondaryBubble && now - lastTimeForSender < 3000L)) {
+                return
+            }
+        }
+
         val isMessaging = isMessagingApp(sbn)
         val isMedia = isMediaApp(sbn)
         val isAlarm = isAlarmNotification(sbn)
@@ -421,21 +464,43 @@ class DynamicNotificationService : NotificationListenerService() {
         if (isMedia && !prefs.isMediaIslandEnabled.first()) return
         if (!isMedia && !isAlarm && !prefs.isMessageIslandEnabled.first()) return
 
+        // 4. Chống trùng lặp xuyên suốt theo Người gửi (packageName + title) trên Zalo & Messenger:
+        // Messenger/Zalo thường bắn 2 thông báo có ID khác nhau (ví dụ id=10000/10250 và id=20001/20043) cho CÙNG 1 tin nhắn!
+        val senderKey = "${sbn.packageName}|$title"
         val contentKey = "${sbn.packageName}|$title|$text|${progressPercent ?: -1}"
-        val now = System.currentTimeMillis()
         val lastAt = lastPostedTimestamp[contentKey] ?: 0L
-        val isSameContent = (lastNotificationContent[sbn.key] == contentKey)
-        if (isSameContent && (isMedia || now - lastAt < 800L)) return
-        lastPostedTimestamp[contentKey] = now
+        val isSameContentByKey = (lastNotificationContent[sbn.key] == contentKey)
+        val isSameContentBySender = (!isMedia && !isAlarm && progressPercent == null && lastContentPerSender[senderKey] == contentKey)
 
-        val isNewMessage = !isSameContent && !isMedia
+        if (isSameContentByKey && (isMedia || now - lastAt < 1500L)) return
+        if (isSameContentBySender && (isBubbleAttached || now - lastAt < 15000L)) {
+            // Nếu Zalo/Messenger gửi thông báo thứ 2 có cùng nội dung tin nhắn đó mà KHÔNG phải Bubble -> ẩn thông báo gốc trùng lặp rồi thoát
+            if (hideOriginal && !isBubbleAttached && !sbn.isOngoing) {
+                cancelOriginalAndEmptyGroupSummary(sbn)
+            }
+            return
+        }
+
+        lastPostedTimestamp[contentKey] = now
+        val isNewMessage = !isSameContentByKey && !isSameContentBySender && !isMedia
         lastNotificationContent[sbn.key] = contentKey
+        lastContentPerSender[senderKey] = contentKey
+        lastSenderTimestamp[senderKey] = now
 
         // Gom chung ID theo gói ứng dụng + người gửi/tiêu đề để cập nhật gọn trên 1 thẻ duy nhất, không đẻ nhiều thẻ trùng
         val dynamicIslandId = "${sbn.packageName}|${title.ifBlank { sbn.key }}".hashCode()
         activeDynamicIslands[sbn.key] = dynamicIslandId
         activeDismissJobs.remove(sbn.key)?.cancel()
         idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
+
+        // QUY TẮC CHỐNG TRÙNG LẶP TRÊN TRUNG TÂM THÔNG BÁO VÀ CHỐNG VÒNG LẶP BONG BÓNG CHAT:
+        // - Nếu thông báo gốc là Bubble (`isBubbleAttached == true`): TUYỆT ĐỐI KHÔNG gọi `cancelNotification(sbn.key)`
+        //   vì nếu xóa thông báo của Bubble đang mở, Messenger sẽ lập tức re-post lại 9 lần/giây!
+        // - Chỉ hiện thẻ Focus trong Trung tâm thông báo (`showInNotificationShade = true`) khi thông báo gốc THỰC SỰ được ẩn (`willCancelOriginal == true`)
+        //   hoặc khi là Báo thức. Nếu thông báo gốc vẫn còn trên Trung tâm thông báo (`!hideOriginal` hoặc `isBubbleAttached`),
+        //   đặt `showInNotificationShade = false` để thẻ Focus chỉ hiện trên viên thuốc Đảo Động, KHÔNG BAO GIỜ đẻ thêm thẻ thứ 2 trên Trung tâm thông báo!
+        val willCancelOriginal = !sbn.isOngoing && !isMedia && !isAlarm && progressPercent == null && hideOriginal && !isBubbleAttached
+        val showInNotificationShade = willCancelOriginal || isAlarm
 
         val notification = NotificationPayloadBuilder.buildAppFocusNotification(
             context = this,
@@ -448,15 +513,16 @@ class DynamicNotificationService : NotificationListenerService() {
             isNewMessage = isNewMessage,
             isPaletteEnabled = prefs.isPaletteColorEnabled.first(),
             isGradientGlow = prefs.isNotificationGradientGlow.first(),
-            dynamicIslandId = dynamicIslandId
+            dynamicIslandId = dynamicIslandId,
+            showInNotificationShade = showInNotificationShade
         )
 
         FocusProtocolHelper.postNotificationSafely(this, dynamicIslandId, notification, scope = serviceScope)
 
-        if (!sbn.isOngoing && !isMedia && !isAlarm && progressPercent == null && prefs.isHideOriginalNotification.first()) {
+        if (willCancelOriginal) {
             cancelOriginalAndEmptyGroupSummary(sbn)
         }
-        AppLogger.i(TAG, "Đã gửi thông báo Focus cho ${sbn.packageName} (id=$dynamicIslandId, media=$isMedia, alarm=$isAlarm)")
+        AppLogger.i(TAG, "Đã gửi thông báo Focus cho ${sbn.packageName} (id=$dynamicIslandId, media=$isMedia, bubble=$isBubbleAttached, shade=$showInNotificationShade)")
 
         // Cơ chế collapseToAppropriateState cho thông báo:
         // Sau khi thông báo bung Đảo lớn xong (5.5s), tự động nhả blocker "notif" để Đảo Chờ 24/7 luôn sống;
@@ -499,27 +565,68 @@ class DynamicNotificationService : NotificationListenerService() {
         }
 
         // Nếu app gốc (Zalo, Messenger, Telegram...) có thông báo tóm tắt nhóm (FLAG_GROUP_SUMMARY)
-        // mà không còn thông báo con nào khác, xóa luôn thẻ summary để không bị trùng trên Trung tâm thông báo
-        val group = sbn.notification?.group
-        if (!group.isNullOrBlank()) {
-            try {
-                val current = activeNotifications ?: return
-                val sameGroup = current.filter {
-                    it.packageName == sbn.packageName &&
-                        it.key != sbn.key &&
-                        it.notification?.group == group
-                }
-                val hasOtherChildren = sameGroup.any {
-                    (it.notification.flags and Notification.FLAG_GROUP_SUMMARY) == 0
-                }
-                if (!hasOtherChildren) {
-                    for (summary in sameGroup) {
-                        intentionallyRemovedKeys[summary.key] = now
-                        cancelNotification(summary.key)
-                    }
-                }
-            } catch (_: Exception) {}
+        // mà không còn thông báo con nào khác, xóa luôn thẻ summary ngay lập tức VÀ kiểm tra bồi sau 250ms
+        // (bắt gọn cả trường hợp Zalo sinh FLAG_GROUP_SUMMARY trễ vài chục ms sau khi thông báo con bị xóa)
+        sweepOrphanGroupSummaries(sbn.packageName, sbn.key)
+        serviceScope.launch {
+            delay(250L)
+            sweepOrphanGroupSummaries(sbn.packageName, sbn.key)
         }
+    }
+
+    private fun sweepOrphanGroupSummaries(targetPkg: String, excludedKey: String) {
+        try {
+            val current = activeNotifications ?: return
+            val pkgNotifs = current.filter { it.packageName == targetPkg && it.key != excludedKey }
+            val summaries = pkgNotifs.filter { (it.notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0 }
+            if (summaries.isEmpty()) return
+
+            val now = System.currentTimeMillis()
+            for (summary in summaries) {
+                val grp = summary.notification?.group
+                val hasLiveChildren = pkgNotifs.any { child ->
+                    (child.notification.flags and Notification.FLAG_GROUP_SUMMARY) == 0 &&
+                        !intentionallyRemovedKeys.containsKey(child.key) &&
+                        (grp.isNullOrBlank() || child.notification?.group == grp)
+                }
+                if (!hasLiveChildren) {
+                    intentionallyRemovedKeys[summary.key] = now
+                    try {
+                        cancelNotification(summary.key)
+                    } catch (_: Exception) {}
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    /**
+     * Kiểm tra xem thông báo có phải là thông báo dịch vụ trạng thái "Bong bóng chat đang hoạt động"
+     * (không phải nội dung tin nhắn thật) hay không.
+     */
+    private fun isChatHeadServiceStatusNotification(sbn: StatusBarNotification, title: String, text: String): Boolean {
+        val combined = "$title $text".lowercase()
+        if (CHAT_BUBBLE_STATUS_PHRASES.any { combined.contains(it) }) {
+            return true
+        }
+        // Messenger id=10000 khi là ongoing service notification cho Chat Heads
+        if (sbn.packageName == "com.facebook.orca" && sbn.id == 10000 && sbn.isOngoing) {
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Nhận diện thông báo đang được gắn trực tiếp với cửa sổ Bong bóng chat (Android 11+ Bubble / Messenger Chat Head):
+     * - Cờ `Notification.FLAG_BUBBLE` (0x1000)
+     * - Có `bubbleMetadata != null`
+     * - Hoặc thông báo của `com.facebook.orca` có `id in 20000..20999` (ví dụ `20001`, `20043`)
+     */
+    private fun isBubbleAttachedNotification(sbn: StatusBarNotification): Boolean {
+        val notif = sbn.notification ?: return false
+        if ((notif.flags and Notification.FLAG_BUBBLE) != 0) return true
+        if (notif.bubbleMetadata != null) return true
+        if (sbn.packageName == "com.facebook.orca" && sbn.id in 20000..20999) return true
+        return false
     }
 
     private fun extractBestNotificationText(extras: android.os.Bundle): String {
@@ -578,6 +685,12 @@ class DynamicNotificationService : NotificationListenerService() {
         if (template.contains("MediaStyle") || notif.category == Notification.CATEGORY_TRANSPORT) {
             return true
         }
+        // QUAN TRỌNG: Các ứng dụng nhắn tin (như com.zing.zalo, com.facebook.orca, org.telegram.messenger...)
+        // KHÔNG BAO GIỜ được nhận diện là trình phát nhạc qua tên gói!
+        // (Sửa lỗi "com.zing.zalo" chứa từ khóa "zing" khiến tin nhắn Zalo bị biến thành thẻ nhạc media=true gây trùng lặp).
+        if (isMessagingApp(sbn)) {
+            return false
+        }
         val pkg = sbn.packageName.lowercase()
         return MEDIA_KEYWORDS.any { pkg.contains(it) }
     }
@@ -611,8 +724,16 @@ class DynamicNotificationService : NotificationListenerService() {
             "com.miui.clock"
         )
         private val MEDIA_KEYWORDS = listOf(
-            "spotify", "music", "zing", "youtube", "soundcloud", "apple", "audio", "podcast",
+            "spotify", "music", "zing.mp3", "youtube", "soundcloud", "apple", "audio", "podcast",
             "tiktok", "netflix", "vlc", "mxtech", "bilibili", "video", "player"
+        )
+        private val CHAT_BUBBLE_STATUS_PHRASES = listOf(
+            "bong bóng chat đang hoạt động",
+            "chat heads active",
+            "chat head active",
+            "bubbles are active",
+            "đang hiển thị trên các ứng dụng khác",
+            "nhấn để quản lý bong bóng"
         )
     }
 }

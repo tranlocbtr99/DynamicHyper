@@ -33,7 +33,8 @@ object NotificationPayloadBuilder {
         isNewMessage: Boolean,
         isPaletteEnabled: Boolean,
         isGradientGlow: Boolean,
-        dynamicIslandId: Int
+        dynamicIslandId: Int,
+        showInNotificationShade: Boolean = true
     ): Notification {
         val notif = sbn.notification
         val rawAvatarBmp = extractCircularAvatar(context, sbn)
@@ -135,7 +136,7 @@ object NotificationPayloadBuilder {
             put("ticker", if (text.isNotBlank()) "$title: $text" else title)
             put("timeout", 86400000)
             put("enableFloat", shouldFloatOnArrival)
-            put("isShowNotification", true)
+            put("isShowNotification", showInNotificationShade)
             put("islandFirstFloat", shouldFloatOnArrival)
             put("reopen", isAlarm || isNewMessage)
             put("param_island", paramIsland)
@@ -159,7 +160,7 @@ object NotificationPayloadBuilder {
 
         val jsonParam = JSONObject().apply {
             put("param_v2", paramV2)
-            put("isShowNotification", true)
+            put("isShowNotification", showInNotificationShade)
         }.toString()
 
         val tapIntent = Intent(context, IslandTapActivity::class.java).apply {
