@@ -99,7 +99,8 @@ object DebuggingIslandManager {
                 jsonParam = root.toString(),
                 pics = pics,
                 isOngoing = true,
-                priority = NotificationCompat.PRIORITY_DEFAULT
+                priority = NotificationCompat.PRIORITY_DEFAULT,
+                notificationId = DEBUGGING_ISLAND_ID
             )
 
             FocusProtocolHelper.postNotificationSafely(context, DEBUGGING_ISLAND_ID, notification)

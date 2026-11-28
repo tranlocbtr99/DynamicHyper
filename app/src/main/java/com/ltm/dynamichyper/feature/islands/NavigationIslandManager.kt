@@ -125,7 +125,8 @@ object NavigationIslandManager {
                 pics = pics,
                 isOngoing = true,
                 priority = NotificationCompat.PRIORITY_HIGH,
-                largeIcon = navBmp
+                largeIcon = navBmp,
+                notificationId = NAV_ISLAND_ID
             )
 
             IdleIslandManager.setBlockerStatic("nav", true)

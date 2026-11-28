@@ -34,6 +34,8 @@ class PreferencesManager(private val context: Context) {
         // Advanced features from Dynamic Hyper
         val KEY_SCREEN_RECORDING_ISLAND = booleanPreferencesKey("screen_recording_island")
         val KEY_VPN_ISLAND = booleanPreferencesKey("vpn_island")
+        val KEY_RINGER_ISLAND = booleanPreferencesKey("ringer_island_enabled")
+        val KEY_BLUETOOTH_ISLAND = booleanPreferencesKey("bluetooth_island_enabled")
         val KEY_PALETTE_COLOR = booleanPreferencesKey("palette_color_enabled")
 
         // Idle Island Customization & Call Island
@@ -100,6 +102,8 @@ class PreferencesManager(private val context: Context) {
     // Advanced features
     val isScreenRecordingIslandEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_SCREEN_RECORDING_ISLAND] ?: true }
     val isVpnIslandEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_VPN_ISLAND] ?: true }
+    val isRingerIslandEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_RINGER_ISLAND] ?: true }
+    val isBluetoothIslandEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_BLUETOOTH_ISLAND] ?: true }
     val isPaletteColorEnabled: Flow<Boolean> = context.dataStore.data.map { it[KEY_PALETTE_COLOR] ?: true }
 
     // Idle Island Customization & Call Island
@@ -185,6 +189,14 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun setVpnIslandEnabled(value: Boolean) {
         context.dataStore.edit { it[KEY_VPN_ISLAND] = value }
+    }
+
+    suspend fun setRingerIslandEnabled(value: Boolean) {
+        context.dataStore.edit { it[KEY_RINGER_ISLAND] = value }
+    }
+
+    suspend fun setBluetoothIslandEnabled(value: Boolean) {
+        context.dataStore.edit { it[KEY_BLUETOOTH_ISLAND] = value }
     }
 
     suspend fun setPaletteColorEnabled(value: Boolean) {

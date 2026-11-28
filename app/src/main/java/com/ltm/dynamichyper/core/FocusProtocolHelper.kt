@@ -177,7 +177,9 @@ object FocusProtocolHelper {
         actionsMap: Map<String, Any> = emptyMap(),
         enablePromotedLiveUpdate: Boolean = true,
         largeIcon: Bitmap? = null,
-        keepIslandOnLockscreen: Boolean = false
+        keepIslandOnLockscreen: Boolean = false,
+        notificationId: Int? = null,
+        forceLockscreenProperty: Boolean? = null
     ): Notification {
         // Luôn đảm bảo Channel được khởi tạo với IMPORTANCE_HIGH trước khi build
         setupChannel(context)
@@ -193,6 +195,9 @@ object FocusProtocolHelper {
             !ShizukuEngine.isOneTimeOptimizationActive(context)
         val effectiveOngoing = isOngoing || needsNativeLiveUpdateFallback
 
+        // Gán groupKey độc lập cho từng thông báo để chặn hoàn toàn HyperOS AUTOGROUP_SUMMARY (g:Aggregate_AlertingSection)
+        val uniqueGroupKey = "dh_focus_${notificationId ?: title.hashCode()}"
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(smallIconRes)
             .setContentTitle(title)
@@ -202,6 +207,8 @@ object FocusProtocolHelper {
             .setOngoing(effectiveOngoing)
             .setOnlyAlertOnce(onlyAlertOnce)
             .setSilent(isSilent)
+            .setGroup(uniqueGroupKey)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_ALL)
 
         if (needsNativeLiveUpdateFallback) {
             val shortCritical = buildShortCriticalText(title, content)
@@ -249,7 +256,7 @@ object FocusProtocolHelper {
         }
 
         // Xiaomi HyperOS quy định islandProperty là 1 (Hiển thị khi mở khóa), trên Lockscreen bắt buộc là 0 để hiện lên màn hình khóa
-        val isLocked = isKeyguardLocked(context)
+        val isLocked = forceLockscreenProperty ?: isKeyguardLocked(context)
         val targetIslandProperty = if (isLocked) 0 else DEFAULT_ISLAND_PROPERTY
         val targetProtocol = getFocusProtocolVersion(context)
         val patchedJson = patchIslandJson(jsonParam, targetIslandProperty, targetProtocol)
@@ -260,6 +267,10 @@ object FocusProtocolHelper {
         }
         notif.extras.putString("miui.focus.param", patchedJson)
         notif.extras.putString("miui.focus.ticker", title)
+        if (keepIslandOnLockscreen || isLocked) {
+            notif.extras.putBoolean("miui.focus.rv.keep_on_keyguard", true)
+            notif.extras.putBoolean("keep_on_keyguard", true)
+        }
 
         // Đồng bộ miui.focus.param.custom theo chuẩn HyperBridge (ParamCustom) để SystemUI HyperOS 3 và HyperOS 4 luôn nhận diện được
         try {

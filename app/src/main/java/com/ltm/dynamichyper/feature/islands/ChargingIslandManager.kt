@@ -15,9 +15,13 @@ import android.os.BatteryManager
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import com.ltm.dynamichyper.R
+import com.ltm.dynamichyper.core.AppLogger
 import com.ltm.dynamichyper.core.FocusProtocolHelper
+import com.ltm.dynamichyper.core.ShizukuEngine
 import com.ltm.dynamichyper.data.PreferencesManager
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -26,9 +30,12 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Quản lý Đảo Sạc Pin & Cáp USB (Charging Island) của Dynamic Hyper
- * Tự động bung to đảo khi cắm sạc hiển thị phần trăm pin, công suất sạc thời gian thực (W)
- * và thời gian ước tính sạc đầy, tự động đổi màu neon theo cấp độ sạc.
+ * Quản lý Đảo Sạc Pin & Cáp USB (Charging Island) của Dynamic Hyper.
+ * Áp dụng cơ chế `collapseToAppropriateState()` từ Dynamic Notch Bar:
+ * - Khi vừa cắm sạc (`ACTION_POWER_CONNECTED`) hoặc khi pin đầy 100%, bung Đảo Sạc hiển thị
+ *   phần trăm pin, công suất sạc (W) và thời gian ước tính sạc đầy trong đúng 6 giây (`AUTO_COLLAPSE_MS = 6000L`),
+ *   sau đó tự động ẩn Đảo Sạc (`id=6666`) và nhả `blockers=[charging]` để trả lại Đảo Chờ 24/7 / Đảo Thông báo.
+ * - Tuyệt đối không giữ `blockers=[charging]` suốt 24/24 khi đang cắm cáp USB.
  */
 class ChargingIslandManager(
     private val context: Context,
@@ -40,11 +47,13 @@ class ChargingIslandManager(
     companion object {
         const val CHARGING_NOTIFICATION_ID = 6666
         private const val PIC_CHARGING_LIGHTNING = "charging_lightning_icon"
+        private const val AUTO_COLLAPSE_MS = 6000L
     }
 
-    private var isChargingActive = false
-    private var lastReportedPercent = -1
-    private var lastReportedWattageRounded = -1
+    private var isPluggedIn = false
+    private var isChargingIslandShowing = false
+    private var lastMilestonePercent = -1
+    private var autoCollapseJob: Job? = null
 
     enum class ChargingTier(
         val tierName: String,
@@ -55,28 +64,28 @@ class ChargingIslandManager(
     ) {
         HYPER_CHARGE(
             tierName = "Xiaomi HyperCharge",
-            highlightColor = "#FF3B30", // Neon Flame Red
+            highlightColor = "#FF3B30",
             startColor = Color.parseColor("#FF5E3A"),
             endColor = Color.parseColor("#FF2A6D"),
             isMultiBolt = true
         ),
         TURBO_CHARGE(
             tierName = "Mi Turbo Charge",
-            highlightColor = "#FF9F0A", // Neon Amber Gold
+            highlightColor = "#FF9F0A",
             startColor = Color.parseColor("#FF9500"),
             endColor = Color.parseColor("#FFB800"),
             isMultiBolt = true
         ),
         FAST_CHARGE(
             tierName = "Sạc Nhanh QC/PD",
-            highlightColor = "#30D158", // iOS Electric Mint Green
+            highlightColor = "#30D158",
             startColor = Color.parseColor("#30D158"),
             endColor = Color.parseColor("#34C759"),
             isMultiBolt = false
         ),
         STANDARD_CHARGE(
             tierName = "Sạc Tiêu Chuẩn",
-            highlightColor = "#34C759", // Apple Emerald Green
+            highlightColor = "#34C759",
             startColor = Color.parseColor("#28CD41"),
             endColor = Color.parseColor("#00C7BE"),
             isMultiBolt = false
@@ -88,30 +97,46 @@ class ChargingIslandManager(
             val action = intent?.action ?: return
             when (action) {
                 Intent.ACTION_POWER_CONNECTED -> {
+                    isPluggedIn = true
+                    lastMilestonePercent = getBatteryPercentage()
                     scope.launch {
                         if (prefs.isChargingIslandEnabled.first()) {
-                            showChargingIsland(getBatteryPercentage(), intent)
+                            val sticky = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                            showChargingIslandTransient(getBatteryPercentage(), sticky ?: intent)
                         }
                     }
                 }
                 Intent.ACTION_POWER_DISCONNECTED -> {
-                    hideChargingIsland()
+                    isPluggedIn = false
+                    lastMilestonePercent = -1
+                    collapseToAppropriateState()
                 }
                 Intent.ACTION_BATTERY_CHANGED -> {
                     val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-                    val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-                            status == BatteryManager.BATTERY_STATUS_FULL
-                    if (isCharging) {
-                        scope.launch {
-                            if (prefs.isChargingIslandEnabled.first()) {
-                                val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-                                val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-                                val percent = if (level >= 0 && scale > 0) (level * 100 / scale) else getBatteryPercentage()
-                                showChargingIsland(percent, intent)
+                    val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+                    val isChargingNow = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                        status == BatteryManager.BATTERY_STATUS_FULL || plugged > 0
+
+                    val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                    val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                    val percent = if (level >= 0 && scale > 0) (level * 100 / scale) else getBatteryPercentage()
+
+                    if (isChargingNow) {
+                        val justConnected = !isPluggedIn
+                        val justReachedFull = (percent == 100 && lastMilestonePercent != 100)
+                        isPluggedIn = true
+                        if (justConnected || justReachedFull) {
+                            lastMilestonePercent = percent
+                            scope.launch {
+                                if (prefs.isChargingIslandEnabled.first()) {
+                                    showChargingIslandTransient(percent, intent)
+                                }
                             }
                         }
-                    } else if (isChargingActive) {
-                        hideChargingIsland()
+                    } else if (isPluggedIn || isChargingIslandShowing) {
+                        isPluggedIn = false
+                        lastMilestonePercent = -1
+                        collapseToAppropriateState()
                     }
                 }
             }
@@ -119,29 +144,28 @@ class ChargingIslandManager(
     }
 
     fun startListening() {
+        // Đảm bảo không còn kẹt blocker "charging" từ phiên cũ
+        IdleIslandManager.setBlockerStatic("charging", false)
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_POWER_CONNECTED)
             addAction(Intent.ACTION_POWER_DISCONNECTED)
             addAction(Intent.ACTION_BATTERY_CHANGED)
         }
         try {
-            context.registerReceiver(batteryReceiver, filter)
+            val sticky = context.registerReceiver(batteryReceiver, filter)
+            val plugged = sticky?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0
+            isPluggedIn = plugged > 0
+            if (isPluggedIn) {
+                lastMilestonePercent = getBatteryPercentage()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Register battery receiver failed: ${e.message}")
         }
 
         scope.launch {
             prefs.isChargingIslandEnabled.collect { enabled ->
-                if (!enabled && isChargingActive) {
-                    hideChargingIsland()
-                } else if (enabled && !isChargingActive) {
-                    val sticky = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
-                    val status = sticky?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
-                    val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
-                        status == BatteryManager.BATTERY_STATUS_FULL
-                    if (isCharging) {
-                        showChargingIsland(getBatteryPercentage(), sticky)
-                    }
+                if (!enabled && isChargingIslandShowing) {
+                    collapseToAppropriateState()
                 }
             }
         }
@@ -151,7 +175,7 @@ class ChargingIslandManager(
         try {
             context.unregisterReceiver(batteryReceiver)
         } catch (_: Exception) {}
-        hideChargingIsland()
+        collapseToAppropriateState()
     }
 
     private fun getBatteryPercentage(): Int {
@@ -159,26 +183,21 @@ class ChargingIslandManager(
         return bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: 80
     }
 
-    /**
-     * Đo lường công suất sạc tức thời (Watt)
-     */
     private fun getChargingWattage(intent: Intent?): Double {
         val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
         var currentAmps = 0.0
         var voltageVolts = 0.0
 
-        // 1. Thử lấy dòng điện tức thời (µA hoặc mA) từ BatteryManager
         val currentNow = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) ?: 0
         val absCurrent = abs(currentNow)
         if (absCurrent > 0) {
             currentAmps = if (absCurrent > 10000) {
-                absCurrent / 1_000_000.0 // µA -> A
+                absCurrent / 1_000_000.0
             } else {
-                absCurrent / 1_000.0 // mA -> A
+                absCurrent / 1_000.0
             }
         }
 
-        // 2. Lấy điện áp (mV)
         val voltageMv = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1) ?: -1
         if (voltageMv > 0) {
             voltageVolts = voltageMv / 1_000.0
@@ -186,8 +205,6 @@ class ChargingIslandManager(
 
         var watts = currentAmps * voltageVolts
 
-        // 3. Fallback: Nếu watts <= 0.5W hoặc currentNow không đọc được,
-        // thử lấy max_charging_current & max_charging_voltage
         if (watts <= 0.5) {
             val maxCurrent = intent?.getIntExtra("max_charging_current", -1) ?: -1
             val maxVoltage = intent?.getIntExtra("max_charging_voltage", -1) ?: -1
@@ -198,7 +215,6 @@ class ChargingIslandManager(
             }
         }
 
-        // 4. Fallback mặc định theo nguồn cấp cắm
         if (watts <= 0.5) {
             val plugged = intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
             watts = when (plugged) {
@@ -212,9 +228,6 @@ class ChargingIslandManager(
         return watts
     }
 
-    /**
-     * Ước tính thời gian sạc đầy pin
-     */
     private fun getTimeToFull(percent: Int, watts: Double): String {
         if (percent >= 100) return "Đã đầy pin"
 
@@ -228,7 +241,6 @@ class ChargingIslandManager(
         if (remMs > 0) {
             minutes = (remMs / 60000L).toInt()
         } else {
-            // Redmi K80 có dung lượng pin ~6550 mAh, xấp xỉ ~25.5 Wh
             val remainingRatio = (100 - percent).coerceIn(1, 100) / 100.0
             val remainingWh = 25.5 * remainingRatio
             val effectiveWatts = watts.coerceAtLeast(4.0) * 0.85
@@ -254,34 +266,28 @@ class ChargingIslandManager(
         }
     }
 
-    private suspend fun showChargingIsland(percent: Int, intent: Intent? = null) {
+    /**
+     * Hiển thị Đảo Sạc trong 6 giây rồi tự động gọi `collapseToAppropriateState()`
+     * để trả về Đảo Chờ 24/7 / Đảo Nhạc / Đảo Thông báo.
+     */
+    private suspend fun showChargingIslandTransient(percent: Int, intent: Intent? = null) {
         val showWattage = prefs.isChargingWattageEnabled.first()
         val showTimeToFull = prefs.isChargingTimeToFullEnabled.first()
 
         val watts = getChargingWattage(intent)
         val tier = determineTier(watts)
         val timeStr = getTimeToFull(percent, watts)
-
         val wattRounded = watts.roundToInt()
-        // Tránh flood notification nếu phần trăm và công suất không đổi
-        if (isChargingActive && percent == lastReportedPercent && wattRounded == lastReportedWattageRounded) {
-            return
-        }
-
-        isChargingActive = true
-        lastReportedPercent = percent
-        lastReportedWattageRounded = wattRounded
-
         val wattStr = if (watts >= 10.0) "${wattRounded}W" else "%.1fW".format(Locale.US, watts)
 
-        // Tiêu đề đảo: Đang sạc 78% • 33W
-        val titleText = if (showWattage) {
+        val titleText = if (percent >= 100) {
+            "Đã Sạc Đầy 100%"
+        } else if (showWattage) {
             "Đang sạc $percent% • $wattStr"
         } else {
             "Đang sạc $percent%"
         }
 
-        // Nội dung phụ: Còn ~25p đầy • Mi Turbo Charge
         val contentText = if (showTimeToFull && percent < 100) {
             "Còn $timeStr đầy • ${tier.tierName}"
         } else {
@@ -290,28 +296,27 @@ class ChargingIslandManager(
 
         val root = JSONObject()
         val paramV2 = JSONObject()
-        paramV2.put("protocol", FocusProtocolHelper.getFocusProtocolVersion(context))
+        paramV2.put("protocol", 1)
         paramV2.put("business", "taxi")
         paramV2.put("updatable", true)
         paramV2.put("ticker", titleText)
-        paramV2.put("timeout", 86400000)
+        paramV2.put("timeout", 6000)
         paramV2.put("enableFloat", true)
         paramV2.put("isShowNotification", false)
         paramV2.put("islandFirstFloat", true)
         paramV2.put("reopen", true)
 
         val paramIsland = JSONObject()
-        paramIsland.put("islandProperty", 1)
+        paramIsland.put("islandProperty", if (FocusProtocolHelper.isKeyguardLocked(context)) 0 else 1)
         paramIsland.put("islandPriority", 3)
-        paramIsland.put("islandTimeout", 86400) // 24 giờ (đơn vị giây)
+        paramIsland.put("islandTimeout", 6) // Tự đóng sau 6 giây
         paramIsland.put("islandOrder", false)
-        paramIsland.put("dismissIsland", false)
+        paramIsland.put("dismissIsland", true)
         paramIsland.put("maxSize", false)
         paramIsland.put("needCloseAnimation", true)
         paramIsland.put("expandedTime", 4)
         paramIsland.put("highlightColor", tier.highlightColor)
 
-        // bigIslandArea: Left = Glowing Tier Lightning Badge, Right = Text Info
         val bigIslandArea = JSONObject()
         val leftInfo = JSONObject()
         leftInfo.put("type", 1)
@@ -341,7 +346,6 @@ class ChargingIslandManager(
 
         paramIsland.put("bigIslandArea", bigIslandArea)
 
-        // smallIslandArea: Icon tia sét neon bóng mờ trên đảo nhỏ
         val smallIslandArea = JSONObject()
         val smallPic = JSONObject()
         smallPic.put("type", 1)
@@ -383,33 +387,40 @@ class ChargingIslandManager(
             smallIconRes = R.drawable.ic_launcher_foreground,
             jsonParam = jsonParam,
             pics = pics,
-            isOngoing = true,
+            isOngoing = false,
             onlyAlertOnce = false,
             largeIcon = lightningBmp,
-            keepIslandOnLockscreen = true
+            keepIslandOnLockscreen = true,
+            notificationId = CHARGING_NOTIFICATION_ID
         )
 
+        isChargingIslandShowing = true
         IdleIslandManager.setBlockerStatic("charging", true)
+        ShizukuEngine.clearPostedActiveId(CHARGING_NOTIFICATION_ID)
         FocusProtocolHelper.postNotificationSafely(context, CHARGING_NOTIFICATION_ID, notif)
+        AppLogger.i(TAG, "Hiển thị Đảo Sạc tạm thời ($titleText) -> tự thu về Đảo Chờ sau ${AUTO_COLLAPSE_MS / 1000}s")
+
+        autoCollapseJob?.cancel()
+        autoCollapseJob = scope.launch {
+            delay(AUTO_COLLAPSE_MS)
+            collapseToAppropriateState()
+        }
     }
 
-    private fun hideChargingIsland() {
-        isChargingActive = false
-        lastReportedPercent = -1
-        lastReportedWattageRounded = -1
+    /**
+     * Thu gọn Đảo Sạc sau khi hiển thị xong để trả về trạng thái phù hợp (Đảo Chờ 24/7 / Đảo Nhạc / Thông báo).
+     */
+    fun collapseToAppropriateState() {
+        autoCollapseJob?.cancel()
+        autoCollapseJob = null
+        isChargingIslandShowing = false
+        ShizukuEngine.clearPostedActiveId(CHARGING_NOTIFICATION_ID)
         try {
             NotificationManagerCompat.from(context).cancel(CHARGING_NOTIFICATION_ID)
         } catch (_: Exception) {}
         IdleIslandManager.setBlockerStatic("charging", false)
     }
 
-    /**
-     * Tạo biểu tượng sạc hiệu ứng iOS Liquid Glass cao cấp:
-     * - Vòng hào quang phát sáng neon tinh tế
-     * - Thể tích hình cầu gradient bóng mờ theo cấp độ sạc
-     * - Điểm phản chiếu ánh sáng trắng (Specular gloss)
-     * - Tia sét vector sắc nét (đơn hoặc kép theo Tier)
-     */
     private fun createLiquidGlassLightningBitmap(tier: ChargingTier): Bitmap {
         val size = 128
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -418,7 +429,6 @@ class ChargingIslandManager(
         val center = size / 2f
         val radius = size * 0.44f
 
-        // 1. Vòng hào quang phát sáng ngoài (Ambient Glow Ring)
         val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = tier.startColor
             alpha = 60
@@ -427,7 +437,6 @@ class ChargingIslandManager(
         }
         canvas.drawCircle(center, center, radius + 4f, glowPaint)
 
-        // 2. Nền cầu bóng kính Gradient (Liquid Glass Disc)
         val gradientPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             shader = LinearGradient(
                 size * 0.15f, size * 0.15f,
@@ -440,7 +449,6 @@ class ChargingIslandManager(
         }
         canvas.drawCircle(center, center, radius, gradientPaint)
 
-        // 3. Lớp phản chiếu ánh sáng mặt kính cong (Glass Specular Highlight)
         val highlightPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             shader = LinearGradient(
                 center, size * 0.1f,
@@ -457,14 +465,12 @@ class ChargingIslandManager(
             highlightPaint
         )
 
-        // 4. Vẽ tia sét sắc nét (Vector Lightning Bolt)
         val whiteBoltPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
             style = Paint.Style.FILL
         }
 
         if (tier.isMultiBolt) {
-            // Tia sét kép cho chế độ Turbo và HyperCharge
             val bolt1 = Path().apply {
                 moveTo(size * 0.44f, size * 0.24f)
                 lineTo(size * 0.26f, size * 0.52f)
@@ -486,7 +492,6 @@ class ChargingIslandManager(
             canvas.drawPath(bolt1, whiteBoltPaint)
             canvas.drawPath(bolt2, whiteBoltPaint)
         } else {
-            // Tia sét đơn thanh lịch cho sạc thường & sạc nhanh
             val bolt = Path().apply {
                 moveTo(size * 0.55f, size * 0.20f)
                 lineTo(size * 0.33f, size * 0.52f)

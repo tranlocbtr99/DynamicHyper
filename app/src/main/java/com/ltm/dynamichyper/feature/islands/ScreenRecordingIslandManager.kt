@@ -106,7 +106,8 @@ object ScreenRecordingIslandManager {
                 jsonParam = jsonParam,
                 pics = pics,
                 isOngoing = true,
-                largeIcon = redDotBmp
+                largeIcon = redDotBmp,
+                notificationId = RECORDING_NOTIFICATION_ID
             )
 
             IdleIslandManager.setBlockerStatic("record", true)

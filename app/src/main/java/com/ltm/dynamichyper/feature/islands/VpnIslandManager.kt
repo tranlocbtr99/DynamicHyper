@@ -151,7 +151,8 @@ class VpnIslandManager(private val context: Context) {
                 jsonParam = jsonParam,
                 pics = pics,
                 isOngoing = true,
-                largeIcon = vpnDotBmp
+                largeIcon = vpnDotBmp,
+                notificationId = VPN_NOTIFICATION_ID
             )
 
             IdleIslandManager.setBlockerStatic("vpn", true)

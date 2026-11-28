@@ -148,6 +148,7 @@ internal fun OverviewTabScreen(
     var showTermsDialog by remember { mutableStateOf(false) }
     var showDonateDialog by remember { mutableStateOf(false) }
     var showDiagnosticDialog by remember { mutableStateOf(false) }
+    var showRevokeConfirmDialog by remember { mutableStateOf(false) }
     var updateInfoState by remember { mutableStateOf<UpdateInfo?>(null) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var isPermissionsExpanded by remember { mutableStateOf(false) }
@@ -675,6 +676,43 @@ internal fun OverviewTabScreen(
                         isGranted = isInstallGranted,
                         onActionClick = { PermissionHelper.openInstallPermissionSettings(context) }
                     )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    HorizontalDivider(color = GlassBorderSubtle)
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Nút bấm duy nhất: Thu hồi toàn bộ quyền đã cấp & Khôi phục nguyên bản
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFFFF453A).copy(alpha = 0.14f))
+                            .border(0.8.dp, Color(0xFFFF453A).copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                            .clickable { showRevokeConfirmDialog = true }
+                            .padding(vertical = 11.dp, horizontal = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.RemoveModerator,
+                                contentDescription = null,
+                                tint = Color(0xFFFF453A),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "THU HỒI TOÀN BỘ QUYỀN ĐÃ CẤP (1-CHẠM)",
+                                style = Typography.titleSmall.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFFF453A)
+                                )
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1020,6 +1058,90 @@ internal fun OverviewTabScreen(
     if (showDiagnosticDialog) {
         DiagnosticLogDialog(
             onDismissRequest = { showDiagnosticDialog = false }
+        )
+    }
+
+    if (showRevokeConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showRevokeConfirmDialog = false },
+            containerColor = Color(0xFF1E1E22),
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.RemoveModerator,
+                    contentDescription = null,
+                    tint = Color(0xFFFF453A),
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Thu Hồi Toàn Bộ Quyền Đã Cấp?",
+                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = Color.White)
+                )
+            },
+            text = {
+                Text(
+                    text = "Thao tác này sẽ bằng 1 nút bấm duy nhất:\n" +
+                        "• Tắt toàn bộ Đảo Động & dịch vụ nền đang chạy.\n" +
+                        "• Thu hồi quyền Đọc Thông Báo, quyền Gửi Thông Báo, quyền Bluetooth, Tự khởi chạy, Hiển thị trên màn hình khóa & Thông báo nổi.\n" +
+                        "• Mở lại mạng nguyên bản cho com.xiaomi.xmsf và khôi phục quyền cuộc gọi toàn màn hình cho Zalo/Messenger.",
+                    style = Typography.bodySmall.copy(color = Color.White.copy(alpha = 0.85f), lineHeight = 19.sp)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showRevokeConfirmDialog = false
+                        scope.launch {
+                            prefs.setAutoStartMarked(false)
+                            prefs.setIdleIslandEnabled(false)
+                            IdleIslandManager.hideIdleIsland(context)
+                            try {
+                                context.startService(
+                                    Intent(context, com.ltm.dynamichyper.service.KeepAliveService::class.java).apply {
+                                        action = com.ltm.dynamichyper.service.KeepAliveService.ACTION_STOP
+                                    }
+                                )
+                            } catch (_: Throwable) {}
+
+                            val revokedViaShizuku = withContext(Dispatchers.IO) {
+                                ShizukuEngine.revokeAllGrantedPermissions(context)
+                            }
+                            isOneTimeActivated = false
+                            isPostNotificationGranted = PermissionHelper.isPostNotificationGranted(context)
+                            isNotificationAccessGranted = PermissionHelper.isNotificationAccessGranted(context)
+                            isFloatingNotificationGranted = PermissionHelper.isFloatingNotificationAllowed(context)
+                            isBatteryOptimizationIgnored = PermissionHelper.isBatteryOptimizationIgnored(context)
+                            isLockscreenOpGranted = PermissionHelper.isMiuiOpAllowed(context, 10008)
+                            isAutoStartGranted = false
+
+                            if (revokedViaShizuku) {
+                                Toast.makeText(
+                                    context,
+                                    "Đã thu hồi toàn bộ quyền đã cấp & khôi phục hệ thống nguyên bản!",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "Đã tắt Đảo & thu hồi quyền ứng dụng. Đang mở trang Quyền để tắt nốt quyền hệ thống...",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                                PermissionHelper.openNotificationAccessSettings(context)
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF453A)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Thu Hồi Ngay", fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRevokeConfirmDialog = false }) {
+                    Text("Hủy", color = TextSecondary)
+                }
+            }
         )
     }
 

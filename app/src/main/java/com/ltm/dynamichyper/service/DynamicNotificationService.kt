@@ -15,6 +15,7 @@ import com.ltm.dynamichyper.core.AppLogger
 import com.ltm.dynamichyper.core.FocusProtocolHelper
 import com.ltm.dynamichyper.core.ListenerWatchdog
 import com.ltm.dynamichyper.core.NativeIslandTracker
+import com.ltm.dynamichyper.core.RemoteViewsExtractor
 import com.ltm.dynamichyper.core.ShizukuEngine
 import com.ltm.dynamichyper.data.PreferencesManager
 import com.ltm.dynamichyper.feature.islands.*
@@ -24,8 +25,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * DynamicNotificationService - Dịch vụ lắng nghe thông báo lõi của Dynamic Hyper.
- * Phân loại thông báo (Cuộc gọi, Quay màn hình, Dẫn đường, Tin nhắn, Nhạc),
- * điều phối Đảo Chờ 24/7 và tự động dọn dẹp khi người dùng xem hoặc xóa thông báo.
+ * Phân loại thông báo (Cuộc gọi, Quay màn hình, Dẫn đường, Tin nhắn, Nhạc, Chuông/Rung, Tai nghe Bluetooth),
+ * điều phối Đảo Chờ 24/7 trên cả Màn hình khóa & Màn hình chính, và tự động dọn dẹp khi người dùng xem hoặc xóa thông báo.
  */
 class DynamicNotificationService : NotificationListenerService() {
 
@@ -35,6 +36,8 @@ class DynamicNotificationService : NotificationListenerService() {
     private lateinit var idleIslandManager: IdleIslandManager
     private lateinit var vpnIslandManager: VpnIslandManager
     private lateinit var chargingIslandManager: ChargingIslandManager
+    private lateinit var ringerIslandManager: RingerIslandManager
+    private lateinit var bluetoothIslandManager: BluetoothIslandManager
     private lateinit var callIslandManager: CallIslandManager
 
     private val activeDynamicIslands = ConcurrentHashMap<String, Int>()
@@ -46,8 +49,10 @@ class DynamicNotificationService : NotificationListenerService() {
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            when (intent?.action) {
-                Intent.ACTION_USER_PRESENT, Intent.ACTION_SCREEN_ON, Intent.ACTION_SCREEN_OFF -> {
+            val action = intent?.action ?: return
+            when (action) {
+                Intent.ACTION_SCREEN_OFF, Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
+                    idleIslandManager.onScreenLockStateChanged(action)
                     reconcileActiveIslandsAndRestoreIdle(forceReassert = true)
                 }
             }
@@ -102,6 +107,10 @@ class DynamicNotificationService : NotificationListenerService() {
         vpnIslandManager = VpnIslandManager(this)
         chargingIslandManager = ChargingIslandManager(this, serviceScope, prefs)
         chargingIslandManager.startListening()
+        ringerIslandManager = RingerIslandManager(this, serviceScope, prefs)
+        ringerIslandManager.startListening()
+        bluetoothIslandManager = BluetoothIslandManager(this, serviceScope, prefs)
+        bluetoothIslandManager.startListening()
         callIslandManager = CallIslandManager(this, serviceScope, prefs)
 
         serviceScope.launch {
@@ -235,6 +244,8 @@ class DynamicNotificationService : NotificationListenerService() {
                     }
                 }
                 ChargingIslandManager.CHARGING_NOTIFICATION_ID,
+                RingerIslandManager.RINGER_NOTIFICATION_ID,
+                BluetoothIslandManager.BLUETOOTH_NOTIFICATION_ID,
                 ScreenRecordingIslandManager.RECORDING_NOTIFICATION_ID,
                 VpnIslandManager.VPN_NOTIFICATION_ID,
                 NavigationIslandManager.NAV_ISLAND_ID,
@@ -334,9 +345,10 @@ class DynamicNotificationService : NotificationListenerService() {
 
             if (activeDynamicIslands.isEmpty()) {
                 idleIslandManager.onEventCountChanged(0)
-                if (forceReassert && !IdleIslandManager.shouldSuppressIdle()) {
-                    idleIslandManager.reassert(force = true, delayMs = 200L)
-                }
+            }
+            val isLocked = IdleIslandManager.isPhoneLocked || FocusProtocolHelper.isKeyguardLocked(this)
+            if (forceReassert && !IdleIslandManager.shouldSuppressIdle(onLockscreen = isLocked)) {
+                idleIslandManager.reassert(force = true, delayMs = 150L)
             }
         } catch (e: Exception) {
             Log.w(TAG, "reconcileActiveIslands error: ${e.message}")
@@ -363,9 +375,19 @@ class DynamicNotificationService : NotificationListenerService() {
         }
 
         val extras = notif.extras ?: return
-        val title = (extras.getCharSequence(Notification.EXTRA_TITLE)
+        var title = (extras.getCharSequence(Notification.EXTRA_TITLE)
             ?: extras.getCharSequence(Notification.EXTRA_TITLE_BIG))?.toString()?.trim() ?: ""
-        val text = extractBestNotificationText(extras)
+        var text = extractBestNotificationText(extras)
+
+        // Fallback trích xuất văn bản & đồng hồ đếm từ custom RemoteViews nếu EXTRA_TITLE và EXTRA_TEXT bị rỗng
+        if (title.isBlank() && text.isBlank()) {
+            val extractedRv = RemoteViewsExtractor.extract(this, sbn)
+            if (extractedRv != null) {
+                title = extractedRv.title
+                text = extractedRv.text
+            }
+        }
+
         if (title.isBlank() && text.isBlank()) return
         if (title.equals(sbn.packageName, ignoreCase = true) || text.equals(sbn.packageName, ignoreCase = true)) return
 
@@ -420,15 +442,20 @@ class DynamicNotificationService : NotificationListenerService() {
         }
         AppLogger.i(TAG, "Đã gửi thông báo Focus cho ${sbn.packageName} (id=$dynamicIslandId, media=$isMedia, alarm=$isAlarm)")
 
+        // Cơ chế collapseToAppropriateState cho thông báo:
+        // Sau khi thông báo bung Đảo lớn xong (5.5s), tự động nhả blocker "notif" để Đảo Chờ 24/7 luôn sống;
+        // nếu người dùng tắt "Giữ Đảo Thu Nhỏ" (!isPersistent) thì hủy luôn thông báo Focus của app đó.
         val isPersistent = prefs.isPersistentNotificationIsland.first()
-        if (!isMedia && !isAlarm && progressPercent == null && !isPersistent) {
+        if (!isMedia && !isAlarm && progressPercent == null) {
             val dismissJob = serviceScope.launch {
                 delay(5500L)
                 activeDynamicIslands.remove(sbn.key)
                 activeDismissJobs.remove(sbn.key)
-                try {
-                    NotificationManagerCompat.from(this@DynamicNotificationService).cancel(dynamicIslandId)
-                } catch (_: Exception) {}
+                if (!isPersistent) {
+                    try {
+                        NotificationManagerCompat.from(this@DynamicNotificationService).cancel(dynamicIslandId)
+                    } catch (_: Exception) {}
+                }
                 idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
             }
             activeDismissJobs[sbn.key] = dismissJob
@@ -534,6 +561,8 @@ class DynamicNotificationService : NotificationListenerService() {
         super.onDestroy()
         vpnIslandManager.stopListening()
         chargingIslandManager.stopListening()
+        ringerIslandManager.stopListening()
+        bluetoothIslandManager.stopListening()
         try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(islandClickReceiver) } catch (_: Exception) {}
     }

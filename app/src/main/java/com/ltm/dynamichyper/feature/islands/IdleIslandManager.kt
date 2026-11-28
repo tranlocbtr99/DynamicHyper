@@ -1,5 +1,6 @@
 package com.ltm.dynamichyper.feature.islands
 
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -23,8 +24,11 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Quản lý Đảo Chờ 24/7 (Idle Island) cho Dynamic Hyper.
- * Tự động tắt nhường chỗ 100% khi có thông báo mới / native island hệ thống
- * và tự động khôi phục sau 700ms khi hết thông báo.
+ * - Hoạt động 24/7 trên cả Màn hình chính (`islandProperty = 1`) lẫn Màn hình khóa (`islandProperty = 0`).
+ * - Áp dụng bộ máy trạng thái `handleScreenStateChanged()` & `collapseToAppropriateState()`:
+ *   Khi khóa màn hình (`isPhoneLocked == true`), ưu tiên thu gọn về Đảo Chờ (`id=9999`, `islandProperty = 0`)
+ *   và vượt qua các blocker phụ (`notif`, `charging`, `ringer`, `bluetooth`).
+ * - Có cơ chế Self-Healing (tự phục hồi mỗi 10 giây nếu bị SystemUI ẩn do kéo thanh thông báo `TempHidden`).
  */
 class IdleIslandManager(
     private val context: Context,
@@ -36,14 +40,21 @@ class IdleIslandManager(
         private const val PIC_IDLE_DOT = "idle_dot"
         private const val PIC_IDLE_LEFT = "idle_left"
         private const val PIC_HIDDEN = "hidden_pixel"
-        private const val REASSERT_DELAY_MS = 700L
+        private const val REASSERT_DELAY_MS = 450L
         private const val TAG = "DynamicHyper_Idle"
+
+        // Chỉ các blocker khẩn cấp thực sự đang diễn ra (cuộc gọi, quay màn hình, dẫn đường) mới chặn Đảo Chờ trên Màn hình khóa
+        private val CRITICAL_LOCKSCREEN_BLOCKERS = setOf("call", "record", "nav")
 
         @Volatile
         private var instance: IdleIslandManager? = null
 
         @Volatile
         private var lastDispatchedWidgetText: String = ""
+
+        @Volatile
+        var isPhoneLocked: Boolean = false
+            private set
 
         private val activeBlockers = ConcurrentHashMap.newKeySet<String>()
 
@@ -54,14 +65,25 @@ class IdleIslandManager(
             instance?.onBlockersChanged()
         }
 
-        fun shouldSuppressIdle(): Boolean = activeBlockers.isNotEmpty() || NativeIslandTracker.hasFresh()
+        fun getActiveBlockersSnapshot(): Set<String> = activeBlockers.toSet()
 
-        fun reassertStatic() {
-            instance?.reassert()
+        /**
+         * Trên màn hình khóa (`isPhoneLocked == true`), học theo `DynamicBar.handleScreenStateChanged()`:
+         * Luôn ưu tiên hiển thị Đảo Chờ (Minimal) trừ khi đang có cuộc gọi / quay màn hình / dẫn đường.
+         */
+        fun shouldSuppressIdle(onLockscreen: Boolean = isPhoneLocked): Boolean {
+            if (onLockscreen) {
+                return activeBlockers.any { it in CRITICAL_LOCKSCREEN_BLOCKERS }
+            }
+            return activeBlockers.isNotEmpty() || NativeIslandTracker.hasFresh()
+        }
+
+        fun reassertStatic(force: Boolean = true, delayMs: Long = REASSERT_DELAY_MS) {
+            instance?.reassert(force = force, delayMs = delayMs)
         }
 
         fun showIdleIsland(context: Context, width: Int, style: String = "minimal", force: Boolean = true) {
-            instance?.reassert(force = force) ?: dispatchDirect(context, width, style, force = force)
+            instance?.reassert(force = force, delayMs = 100L) ?: dispatchDirect(context, width, style, force = force)
         }
 
         fun hideIdleIsland(context: Context) {
@@ -74,7 +96,7 @@ class IdleIslandManager(
         }
 
         fun updateIdleIslandWidth(context: Context, width: Int) {
-            instance?.reassert() ?: dispatchDirect(context, width, "minimal")
+            instance?.reassert(force = true, delayMs = 100L) ?: dispatchDirect(context, width, "minimal", force = true)
         }
 
         fun updateStyle(context: Context, style: String) {
@@ -86,11 +108,20 @@ class IdleIslandManager(
             instance?.isShowing = false
         }
 
-        fun dispatchDirect(context: Context, width: Int, style: String = "minimal", force: Boolean = false) {
+        fun dispatchDirect(
+            context: Context,
+            width: Int,
+            style: String = "minimal",
+            force: Boolean = false,
+            forceLockscreenState: Boolean? = null
+        ) {
             try {
-                if (shouldSuppressIdle()) {
+                val isLocked = forceLockscreenState ?: (isPhoneLocked || FocusProtocolHelper.isKeyguardLocked(context))
+                isPhoneLocked = isLocked
+
+                if (shouldSuppressIdle(onLockscreen = isLocked)) {
                     val remaining = NativeIslandTracker.remainingYieldMs()
-                    Log.d(TAG, "Tạm hoãn Đảo Chờ: blockers=$activeBlockers, nativeYield=${remaining}ms")
+                    Log.d(TAG, "Tạm hoãn Đảo Chờ: blockers=$activeBlockers, isLocked=$isLocked, nativeYield=${remaining}ms")
                     return
                 }
 
@@ -141,7 +172,8 @@ class IdleIslandManager(
                     pillRightText = pillRightText,
                     notifTitle = notifTitle,
                     notifContent = notifContent,
-                    highlightColor = highlightColor
+                    highlightColor = highlightColor,
+                    isLocked = isLocked
                 )
 
                 val bigWidgetBmp = IdleIslandRenderer.renderBigWidgetIcon(context, style)
@@ -160,7 +192,6 @@ class IdleIslandManager(
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
                 )
 
-                val isLocked = FocusProtocolHelper.isKeyguardLocked(context)
                 val currentText = "$style|$notifTitle|$notifContent|$effectiveWidth|$isLocked"
                 if (!force && lastDispatchedWidgetText == currentText && instance?.isShowing == true) {
                     return
@@ -185,16 +216,19 @@ class IdleIslandManager(
                     contentIntent = contentIntent,
                     enablePromotedLiveUpdate = false,
                     largeIcon = bigWidgetBmp,
-                    keepIslandOnLockscreen = true
+                    keepIslandOnLockscreen = true,
+                    notificationId = IDLE_ISLAND_ID,
+                    forceLockscreenProperty = isLocked
                 )
 
                 FocusProtocolHelper.postNotificationSafely(
                     context = context,
                     id = IDLE_ISLAND_ID,
                     notification = notification,
-                    shouldCancel = { shouldSuppressIdle() }
+                    shouldCancel = { shouldSuppressIdle(onLockscreen = isLocked) }
                 )
-                AppLogger.i(TAG, "Đã gửi thông báo Đảo Chờ (style=$style, width=$effectiveWidth, clean=true)")
+                instance?.isShowing = true
+                AppLogger.i(TAG, "Đã gửi Đảo Chờ 24/7 (style=$style, width=$effectiveWidth, isLocked=$isLocked, property=${if (isLocked) 0 else 1})")
             } catch (e: Exception) {
                 Log.e(TAG, "Error direct dispatch: ${e.message}")
                 AppLogger.e(TAG, "Lỗi gửi thông báo Đảo Chờ: ${e.message}", e)
@@ -214,16 +248,21 @@ class IdleIslandManager(
             pillRightText: String,
             notifTitle: String,
             notifContent: String,
-            highlightColor: String
+            highlightColor: String,
+            isLocked: Boolean
         ): String {
             val leftInfo = JSONObject().apply {
                 put("type", 1)
-                // Khi là minimal thì không gắn icon ở bigIslandArea để viên thuốc đen tuyền tối giản.
-                // Với green_dot, weather, battery_temp, ram_usage: gắn icon ở bên trái camera để luôn hiện rõ!
+                // Trên màn hình khóa, HyperOS FocusPlugin yêu cầu picInfo hợp lệ để không lọc bỏ viên thuốc
                 if (style != "minimal") {
                     put("picInfo", JSONObject().apply {
                         put("type", 1)
                         put("pic", "miui.focus.pic_$PIC_IDLE_DOT")
+                    })
+                } else if (isLocked) {
+                    put("picInfo", JSONObject().apply {
+                        put("type", 1)
+                        put("pic", "miui.focus.pic_$PIC_HIDDEN")
                     })
                 }
                 put("textInfo", JSONObject().apply {
@@ -252,7 +291,7 @@ class IdleIslandManager(
             }
 
             val paramIsland = JSONObject().apply {
-                put("islandProperty", 1)
+                put("islandProperty", if (isLocked) 0 else 1)
                 put("islandPriority", 2)
                 put("islandTimeout", 86400000)
                 put("islandOrder", false)
@@ -274,7 +313,9 @@ class IdleIslandManager(
                 put("protocol", 1)
                 put("business", "permanent_island")
                 put("updatable", true)
-                put("ticker", "Permanent Island")
+                put("ticker", notifTitle)
+                put("aodTitle", notifTitle)
+                put("aodPic", "miui.focus.pic_$PIC_IDLE_DOT")
                 put("timeout", 86400000)
                 put("enableFloat", false)
                 put("isShowNotification", true)
@@ -306,11 +347,12 @@ class IdleIslandManager(
     private var isEnabled = true
     var isShowing = false
         internal set
-    private var activeEventCount = 0
     private var pendingJob: Job? = null
+    private var lockTransitionJob: Job? = null
 
     init {
         instance = this
+        isPhoneLocked = FocusProtocolHelper.isKeyguardLocked(context)
 
         scope.launch {
             prefs.isIdleIslandEnabled.collectLatest { enabled ->
@@ -323,34 +365,114 @@ class IdleIslandManager(
             }
         }
 
-        // Cập nhật động nhiệt độ pin / RAM / Thời tiết mỗi 30 giây nếu người dùng chọn style động
+        // Vòng lặp Self-Healing & Dynamic Refresh mỗi 12 giây:
+        // 1. Tự động kiểm tra nếu IDLE_ISLAND_ID (9999) bị mất khỏi NotificationManager.activeNotifications
+        //    (hoặc bị SystemUI ẩn sau khi kéo Trung tâm thông báo) -> tự động khôi phục ngay.
+        // 2. Đồng bộ trạng thái khóa màn hình (isKeyguardLocked) nếu có thay đổi ngầm.
+        // 3. Cập nhật động nhiệt độ pin / RAM / Thời tiết.
         scope.launch {
+            var tickCount = 0
             while (true) {
-                delay(30 * 1000L)
+                delay(12 * 1000L)
+                tickCount++
                 try {
+                    if (!prefs.isIdleIslandEnabled.first()) continue
+                    val currentLocked = FocusProtocolHelper.isKeyguardLocked(context)
+                    val lockChanged = (currentLocked != isPhoneLocked)
+                    isPhoneLocked = currentLocked
+
+                    if (shouldSuppressIdle(onLockscreen = currentLocked)) continue
+
+                    val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                    val isAliveInStatusBar = try {
+                        nm?.activeNotifications?.any { it.id == IDLE_ISLAND_ID } ?: true
+                    } catch (_: Throwable) {
+                        true
+                    }
+
                     val style = prefs.idleIslandStyle.first()
-                    if (isShowing && !shouldSuppressIdle() && (style == "battery_temp" || style == "ram_usage" || style == "weather")) {
+                    val isDynamicStyle = (style == "battery_temp" || style == "ram_usage" || style == "weather")
+
+                    if (!isAliveInStatusBar || !isShowing || lockChanged || (isDynamicStyle && tickCount % 2 == 0)) {
                         val width = prefs.idleIslandWidth.first()
-                        dispatchDirect(context, width, style)
+                        dispatchDirect(
+                            context = context,
+                            width = width,
+                            style = style,
+                            force = !isAliveInStatusBar || lockChanged,
+                            forceLockscreenState = currentLocked
+                        )
+                        isShowing = true
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Dynamic refresh error: ${e.message}")
+                    Log.w(TAG, "Self-healing loop error: ${e.message}")
                 }
             }
         }
 
-        // Heartbeat 24/7: Định kỳ 15 phút làm mới Đảo Chờ để HyperOS không xóa đảo do timeout ngầm
+        // Heartbeat 24/7: Định kỳ 15 phút làm mới Đảo Chờ với force=true để HyperOS không xóa đảo do timeout ngầm
         scope.launch {
             while (true) {
                 delay(15 * 60 * 1000L)
                 try {
-                    if (prefs.isIdleIslandEnabled.first() && !shouldSuppressIdle()) {
+                    val currentLocked = FocusProtocolHelper.isKeyguardLocked(context)
+                    if (prefs.isIdleIslandEnabled.first() && !shouldSuppressIdle(onLockscreen = currentLocked)) {
                         val width = prefs.idleIslandWidth.first()
                         val style = prefs.idleIslandStyle.first()
-                        dispatchDirect(context, width, style)
+                        dispatchDirect(context, width, style, force = true, forceLockscreenState = currentLocked)
                     }
                 } catch (e: Exception) {
                     Log.w(TAG, "Heartbeat refresh error: ${e.message}")
+                }
+            }
+        }
+    }
+
+    /**
+     * Học theo `DynamicBar.handleScreenStateChanged()`:
+     * - Khi màn hình tắt (`ACTION_SCREEN_OFF`) hoặc bật sáng trên màn hình khóa (`ACTION_SCREEN_ON` + locked):
+     *   Ép `isPhoneLocked = true` và phát lại Đảo Chờ với `islandProperty = 0` ở cả 100ms và 850ms
+     *   (để vượt qua độ trễ 500ms của KeyguardManager trên HyperOS).
+     * - Khi mở khóa thành công (`ACTION_USER_PRESENT`):
+     *   Đặt `isPhoneLocked = false` và gọi `collapseToAppropriateState` (nếu không có blocker thì phát với `islandProperty = 1`).
+     */
+    fun onScreenLockStateChanged(action: String) {
+        lockTransitionJob?.cancel()
+        lockTransitionJob = scope.launch {
+            if (!prefs.isIdleIslandEnabled.first()) return@launch
+            val width = prefs.idleIslandWidth.first()
+            val style = prefs.idleIslandStyle.first()
+
+            when (action) {
+                Intent.ACTION_SCREEN_OFF -> {
+                    isPhoneLocked = true
+                    delay(120L)
+                    dispatchDirect(context, width, style, force = true, forceLockscreenState = true)
+                    isShowing = true
+                    // Phát bồi lần 2 sau 850ms khi Keyguard của HyperOS đã khóa hoàn toàn
+                    delay(750L)
+                    if (isPhoneLocked) {
+                        dispatchDirect(context, width, style, force = true, forceLockscreenState = true)
+                        isShowing = true
+                    }
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    val lockedNow = FocusProtocolHelper.isKeyguardLocked(context)
+                    isPhoneLocked = lockedNow
+                    delay(100L)
+                    dispatchDirect(context, width, style, force = true, forceLockscreenState = lockedNow)
+                    isShowing = !shouldSuppressIdle(onLockscreen = lockedNow)
+                }
+                Intent.ACTION_USER_PRESENT -> {
+                    isPhoneLocked = false
+                    delay(150L)
+                    if (!shouldSuppressIdle(onLockscreen = false)) {
+                        dispatchDirect(context, width, style, force = true, forceLockscreenState = false)
+                        isShowing = true
+                    } else {
+                        hideIdleIsland(context)
+                        isShowing = false
+                    }
                 }
             }
         }
@@ -365,8 +487,8 @@ class IdleIslandManager(
 
     @Synchronized
     fun onBlockersChanged() {
-        val suppressed = shouldSuppressIdle()
-        Log.d(TAG, "onBlockersChanged: blockers=$activeBlockers, suppressed=$suppressed, isEnabled=$isEnabled")
+        val suppressed = shouldSuppressIdle(onLockscreen = isPhoneLocked)
+        Log.d(TAG, "onBlockersChanged: blockers=$activeBlockers, isLocked=$isPhoneLocked, suppressed=$suppressed, isEnabled=$isEnabled")
         if (suppressed) {
             pendingJob?.cancel()
             hideIdleIsland(context)
@@ -378,11 +500,11 @@ class IdleIslandManager(
 
     fun updateStyleInternal(style: String) {
         pendingJob?.cancel()
-        if (shouldSuppressIdle()) return
+        if (shouldSuppressIdle(onLockscreen = isPhoneLocked)) return
         pendingJob = scope.launch {
             val width = prefs.idleIslandWidth.first()
             dispatchDirect(context, width, style, force = true)
-            isShowing = !shouldSuppressIdle()
+            isShowing = !shouldSuppressIdle(onLockscreen = isPhoneLocked)
             Log.d(TAG, "Idle Island immediately updated to style: $style")
         }
     }
@@ -391,12 +513,13 @@ class IdleIslandManager(
         pendingJob?.cancel()
         pendingJob = scope.launch {
             delay(delayMs)
-            if (prefs.isIdleIslandEnabled.first() && !shouldSuppressIdle()) {
+            val currentLocked = isPhoneLocked || FocusProtocolHelper.isKeyguardLocked(context)
+            if (prefs.isIdleIslandEnabled.first() && !shouldSuppressIdle(onLockscreen = currentLocked)) {
                 val width = prefs.idleIslandWidth.first()
                 val style = prefs.idleIslandStyle.first()
-                dispatchDirect(context, width, style, force = force)
+                dispatchDirect(context, width, style, force = force, forceLockscreenState = currentLocked)
                 isShowing = true
-                Log.d(TAG, "Idle Island reasserted successfully with style: $style, width: $width (delay=${delayMs}ms)")
+                Log.d(TAG, "Idle Island reasserted (style=$style, width=$width, isLocked=$currentLocked, delay=${delayMs}ms)")
             }
         }
     }

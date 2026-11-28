@@ -179,7 +179,8 @@ object ShizukuEngine {
             "cmd appops set $packageName SYSTEM_ALERT_WINDOW allow",
             "cmd appops set $packageName POST_PROMOTED_NOTIFICATIONS allow",
             "pm grant $packageName android.permission.POST_NOTIFICATIONS",
-            "pm grant $packageName android.permission.POST_PROMOTED_NOTIFICATIONS"
+            "pm grant $packageName android.permission.POST_PROMOTED_NOTIFICATIONS",
+            "pm grant $packageName android.permission.BLUETOOTH_CONNECT"
         )
 
         var successCount = 0
@@ -284,6 +285,82 @@ object ShizukuEngine {
         }
         Log.i(TAG, "Block all full screen calls ($blocked): $allSuccess")
         return allSuccess
+    }
+
+    /**
+     * Thu hồi toàn bộ quyền đã cấp & khôi phục trạng thái hệ thống nguyên bản bằng 1 nút bấm duy nhất:
+     * - Mở lại mạng cho com.xiaomi.xmsf (xóa khỏi restrict-background-blacklist, bật lại package-networking)
+     * - Khôi phục quyền USE_FULL_SCREEN_INTENT cho Zalo/Messenger/Telegram/WhatsApp
+     * - Đặt lại các AppOps MIUI (10008, 10020, 10021, 10033, AUTO_START, SYSTEM_ALERT_WINDOW) về default/ignore
+     * - Gỡ khỏi deviceidle whitelist, thu hồi NotificationListener & runtime permissions (POST_NOTIFICATIONS, BLUETOOTH_CONNECT)
+     * - Xóa trạng thái kích hoạt 1 lần và hủy toàn bộ thông báo Đảo đang hiển thị
+     */
+    fun revokeAllGrantedPermissions(context: Context): Boolean {
+        val packageName = context.packageName
+        var usedShizuku = false
+
+        // 1. Hủy toàn bộ thông báo Đảo hiện tại và xóa cờ kích hoạt 1 lần
+        try {
+            NotificationManagerCompat.from(context).cancelAll()
+            postedActiveIds.clear()
+            context.applicationContext
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .clear()
+                .apply()
+        } catch (_: Throwable) {}
+
+        // 2. Nếu có Shizuku: tự động thu hồi toàn bộ quyền hệ thống & khôi phục XMSF qua shell/IPC
+        if (hasShizukuPermission()) {
+            usedShizuku = true
+            try {
+                val xmsfUid = try {
+                    context.packageManager.getPackageUid("com.xiaomi.xmsf", 0)
+                } catch (_: Exception) { -1 }
+
+                if (xmsfUid > 0) {
+                    try { ShizukuHook.setPackageNetworkingEnabled(xmsfUid, true) } catch (_: Throwable) {}
+                    execCommand("cmd connectivity set-package-networking-enabled true com.xiaomi.xmsf")
+                    execCommand("cmd netpolicy remove restrict-background-blacklist $xmsfUid")
+                    execCommand("cmd appops set com.xiaomi.xmsf RUN_IN_BACKGROUND allow")
+                    execCommand("cmd appops set com.xiaomi.xmsf RUN_ANY_IN_BACKGROUND allow")
+                }
+            } catch (_: Throwable) {}
+
+            // Khôi phục full screen call cho các app nhắn tin
+            blockAllFullScreenCalls(false)
+
+            val revokeCommands = listOf(
+                "cmd notification disallow_listener $packageName/com.ltm.dynamichyper.service.DynamicNotificationService",
+                "dumpsys deviceidle whitelist -$packageName",
+                "cmd appops set $packageName AUTO_START ignore",
+                "cmd appops set $packageName 10008 ignore",
+                "cmd appops set $packageName 10020 ignore",
+                "cmd appops set $packageName 10021 ignore",
+                "cmd appops set $packageName 10033 ignore",
+                "cmd appops set $packageName SYSTEM_ALERT_WINDOW ignore",
+                "pm revoke $packageName android.permission.BLUETOOTH_CONNECT",
+                "pm revoke $packageName android.permission.POST_NOTIFICATIONS"
+            )
+            for (cmd in revokeCommands) {
+                execCommand(cmd)
+            }
+            AppLogger.i(TAG, "✓ Đã thu hồi toàn bộ quyền hệ thống & khôi phục XMSF nguyên bản qua Shizuku")
+        }
+
+        // 3. Thu hồi tự động trên Android 13+ (API 33+) bằng Context.revokeSelfPermissionsOnKill
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            try {
+                context.revokeSelfPermissionsOnKill(
+                    listOf(
+                        android.Manifest.permission.POST_NOTIFICATIONS,
+                        android.Manifest.permission.BLUETOOTH_CONNECT
+                    )
+                )
+            } catch (_: Throwable) {}
+        }
+
+        return usedShizuku
     }
 
     /**

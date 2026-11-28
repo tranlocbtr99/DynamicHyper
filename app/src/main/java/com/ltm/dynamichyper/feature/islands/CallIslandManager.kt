@@ -369,7 +369,8 @@ class CallIslandManager(
                 contentIntent = contentIntent,
                 actionsMap = actionsMap,
                 largeIcon = circularAvatar,
-                keepIslandOnLockscreen = true
+                keepIslandOnLockscreen = true,
+                notificationId = CALL_ISLAND_ID
             )
 
             // Đưa actions vào notification object

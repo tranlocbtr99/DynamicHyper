@@ -83,9 +83,10 @@ object NotificationPayloadBuilder {
             else -> 0
         }
 
+        val isLocked = FocusProtocolHelper.isKeyguardLocked(context)
         val paramIsland = JSONObject().apply {
-            put("islandProperty", 1)
-            put("islandPriority", if (isAlarm) 5 else 2)
+            put("islandProperty", if (isLocked) 0 else 1)
+            put("islandPriority", if (isAlarm) 5 else 3)
             put("islandTimeout", 86400000)
             put("islandOrder", false)
             put("dismissIsland", false)
@@ -188,7 +189,8 @@ object NotificationPayloadBuilder {
             contentIntent = wrappedContentIntent,
             actionsMap = actionsMap,
             largeIcon = avatarBmp,
-            keepIslandOnLockscreen = isAlarm
+            keepIslandOnLockscreen = isAlarm || isNewMessage,
+            notificationId = dynamicIslandId
         )
     }
 
@@ -328,16 +330,11 @@ object NotificationPayloadBuilder {
         val extras = sbn.notification.extras
         @Suppress("DEPRECATION")
         val rawAvatarBmp: Bitmap? = try {
-            when (val largeIconObj = extras?.get(Notification.EXTRA_LARGE_ICON)) {
+            when (val largeIconObj = extras?.get(Notification.EXTRA_LARGE_ICON)
+                ?: extras?.get(Notification.EXTRA_LARGE_ICON_BIG)) {
                 is Bitmap -> largeIconObj
                 is Icon -> loadIconBitmap(context, largeIconObj)
-                else -> {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                        val person = extras?.getParcelable(Notification.EXTRA_CALL_PERSON, android.app.Person::class.java)
-                            ?: extras?.getParcelable(Notification.EXTRA_MESSAGING_PERSON, android.app.Person::class.java)
-                        person?.icon?.let { loadIconBitmap(context, it) }
-                    } else null
-                }
+                else -> extractMessagingStyleOrPersonAvatar(context, extras)
             }
         } catch (_: Exception) {
             null
@@ -355,6 +352,51 @@ object NotificationPayloadBuilder {
         } catch (_: Exception) {
             Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888)
         }
+    }
+
+    /**
+     * Trích xuất Avatar của người gửi từ MessagingStyle (`EXTRA_MESSAGES` -> `sender_person`,
+     * `EXTRA_HISTORIC_MESSAGES` -> `sender_person`, `EXTRA_CALL_PERSON`, `EXTRA_MESSAGING_PERSON`)
+     * khi thông báo không gắn `largeIcon` ở cấp độ root (như Zalo, Telegram, Google Messages, WhatsApp).
+     */
+    @Suppress("DEPRECATION")
+    private fun extractMessagingStyleOrPersonAvatar(context: Context, extras: android.os.Bundle?): Bitmap? {
+        extras ?: return null
+        try {
+            // 1. Kiểm tra mảng tin nhắn EXTRA_MESSAGES và EXTRA_HISTORIC_MESSAGES từ cuối lên đầu
+            val messageArrays = listOfNotNull(
+                extras.getParcelableArray(Notification.EXTRA_MESSAGES),
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    extras.getParcelableArray(Notification.EXTRA_HISTORIC_MESSAGES)
+                } else null
+            )
+            for (arr in messageArrays) {
+                for (i in arr.indices.reversed()) {
+                    val msgBundle = arr[i] as? android.os.Bundle ?: continue
+                    val senderPerson = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        msgBundle.getParcelable("sender_person", android.app.Person::class.java)
+                    } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                        msgBundle.getParcelable("sender_person") as? android.app.Person
+                    } else null
+                    val iconBmp = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                        senderPerson?.icon?.let { loadIconBitmap(context, it) }
+                    } else null
+                    if (iconBmp != null) return iconBmp
+                }
+            }
+
+            // 2. Kiểm tra EXTRA_CALL_PERSON & EXTRA_MESSAGING_PERSON (messagingUser)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                val person = extras.getParcelable(Notification.EXTRA_CALL_PERSON, android.app.Person::class.java)
+                    ?: extras.getParcelable(Notification.EXTRA_MESSAGING_PERSON, android.app.Person::class.java)
+                person?.icon?.let { loadIconBitmap(context, it) }?.let { return it }
+            } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                val person = (extras.getParcelable(Notification.EXTRA_CALL_PERSON) as? android.app.Person)
+                    ?: (extras.getParcelable(Notification.EXTRA_MESSAGING_PERSON) as? android.app.Person)
+                person?.icon?.let { loadIconBitmap(context, it) }?.let { return it }
+            }
+        } catch (_: Throwable) {}
+        return null
     }
 
     private fun loadIconBitmap(context: Context, icon: Icon): Bitmap? {

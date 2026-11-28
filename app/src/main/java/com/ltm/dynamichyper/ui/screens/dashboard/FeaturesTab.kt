@@ -86,6 +86,8 @@ internal fun FeaturesTabScreen(
 
     val isScreenRecordingEnabled by prefs.isScreenRecordingIslandEnabled.collectAsState(initial = true)
     val isVpnEnabled by prefs.isVpnIslandEnabled.collectAsState(initial = true)
+    val isRingerEnabled by prefs.isRingerIslandEnabled.collectAsState(initial = true)
+    val isBluetoothEnabled by prefs.isBluetoothIslandEnabled.collectAsState(initial = true)
     val isPaletteColorEnabled by prefs.isPaletteColorEnabled.collectAsState(initial = true)
     val isChargingEnabled by prefs.isChargingEnabled.collectAsState(initial = true)
     val isChargingWattageEnabled by prefs.isChargingWattageEnabled.collectAsState(initial = true)
@@ -252,8 +254,26 @@ internal fun FeaturesTabScreen(
             HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
 
             GlassSettingItem(
-                title = "Hiệu Ứng Cắm Sạc Pin",
-                subtitle = "Bung đảo hiển thị phần trăm pin và công suất sạc",
+                title = "Đảo Chế Độ Chuông / Rung / Im Lặng",
+                subtitle = "Bung đảo báo trạng thái âm thanh kiểu iOS khi chuyển chế độ chuông, rung, im lặng",
+                checked = isRingerEnabled,
+                onCheckedChange = { scope.launch { prefs.setRingerIslandEnabled(it) } }
+            )
+
+            HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
+
+            GlassSettingItem(
+                title = "Đảo Kết Nối Tai Nghe Bluetooth & % Pin",
+                subtitle = "Bung đảo hiển thị tên tai nghe và phần trăm dung lượng pin khi kết nối Bluetooth",
+                checked = isBluetoothEnabled,
+                onCheckedChange = { scope.launch { prefs.setBluetoothIslandEnabled(it) } }
+            )
+
+            HorizontalDivider(color = GlassBorderSubtle, modifier = Modifier.padding(vertical = 4.dp))
+
+            GlassSettingItem(
+                title = "Hiệu Ứng Cắm Sạc Pin (Tự ẩn sau 6s)",
+                subtitle = "Bung đảo hiển thị phần trăm pin và công suất sạc trong 6 giây rồi tự trả về Đảo Chờ 24/7",
                 checked = isChargingEnabled,
                 onCheckedChange = { scope.launch { prefs.setChargingEnabled(it) } }
             )
