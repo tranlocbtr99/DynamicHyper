@@ -117,19 +117,20 @@ object RomDiagnostics {
 
     private fun hint(context: Context, cn: Boolean, s: IslandProbe.Stats, channelImportance: Int?): String {
         val shizuku = ShizukuEngine.hasShizukuPermission()
+        val isolatedSameBoot = ShizukuEngine.isIsolatedInCurrentBoot(context)
         return when {
             channelImportance != null && channelImportance < NotificationManager.IMPORTANCE_HIGH ->
                 "Kênh thông báo bị hạ mức quan trọng, đảo có thể không bung. Đặt lại kênh về mức cao."
             s.probed == 0 ->
                 "Chưa có phép dò nào. Bấm Test đảo hoặc nhận một thông báo rồi lấy lại nhật ký."
-            s.lost > 0 && cn && !shizuku ->
-                "Đảo bị hệ thống xóa/gỡ trên China ROM khi không có Shizuku. Nghi XMSF trả lỗi -300."
-            s.lost > 0 && shizuku ->
-                "Đảo vẫn bị xóa dù có Shizuku. Xem dòng cảnh báo 'Cách ly XMSF' trong nhật ký."
+            s.lost > 0 && cn && !shizuku && !isolatedSameBoot ->
+                "Đảo bị hệ thống xóa/gỡ trên China ROM khi chưa khóa XMSF trong phiên boot hiện tại. Hãy bật Shizuku kích hoạt 1 lần."
+            s.lost > 0 && (shizuku || isolatedSameBoot) ->
+                "Có ${s.lost}/${s.probed} thông báo bị đóng sớm trong khi ${s.alive} thông báo vẫn sống tốt. Kiểm tra xem thông báo gốc có bị thu hồi nhanh hay không."
             s.lost > 0 ->
                 "Đảo bị hệ thống loại bỏ trên ROM không phải China. Cần thêm dữ liệu."
             else ->
-                "Thông báo đảo vẫn tồn tại ở phía hệ thống. Nếu vẫn không thấy đảo thì lỗi nằm ở khâu vẽ của SystemUI; cần ảnh chụp/video màn hình."
+                "100% thông báo đảo (${s.alive}/${s.probed}) đều tồn tại hoàn hảo ở phía hệ thống!"
         }
     }
 }

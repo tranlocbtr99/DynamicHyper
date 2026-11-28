@@ -13,6 +13,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.ltm.dynamichyper.core.AppLogger
 import com.ltm.dynamichyper.core.FocusProtocolHelper
+import com.ltm.dynamichyper.core.IslandProbe
 import com.ltm.dynamichyper.core.ListenerWatchdog
 import com.ltm.dynamichyper.core.NativeIslandTracker
 import com.ltm.dynamichyper.core.RemoteViewsExtractor
@@ -88,6 +89,7 @@ class DynamicNotificationService : NotificationListenerService() {
                         activeDismissJobs.remove(k)?.cancel()
                         lastNotificationContent.remove(k)
                     }
+                    IslandProbe.cancelTrack(islandId)
                     ShizukuEngine.clearPostedActiveId(islandId)
                     try {
                         NotificationManagerCompat.from(this@DynamicNotificationService).cancel(islandId)
@@ -294,7 +296,12 @@ class DynamicNotificationService : NotificationListenerService() {
             IdleIslandManager.setBlockerStatic("record", false)
         }
 
-        if (intentionallyRemovedKeys.remove(sbn.key) != null) {
+        // QUAN TRỌNG: Không dùng `.remove(sbn.key)` tại đây!
+        // Khi Messenger/Zalo bắn thông báo liên hoàn (x2, x4 trong 1 giây) và `isHideOriginalNotification == true`,
+        // hệ thống có thể gọi `onNotificationRemoved` nhiều lần cho cùng một `sbn.key`.
+        // Nếu xóa khỏi `intentionallyRemovedKeys` ngay lần đầu, lần gọi thứ 2 và hàm `reconcileActiveIslandsAndRestoreIdle`
+        // sẽ thấy `intentionallyRemovedKeys[sbn.key] == null` và TỰ TAY HỦY MẤT ĐẢO MESSENGER vừa tạo!
+        if (intentionallyRemovedKeys.containsKey(sbn.key)) {
             return
         }
 
@@ -302,10 +309,15 @@ class DynamicNotificationService : NotificationListenerService() {
         lastNotificationContent.remove(sbn.key)
         if (dynamicIslandId != null) {
             activeDismissJobs.remove(sbn.key)?.cancel()
-            ShizukuEngine.clearPostedActiveId(dynamicIslandId)
-            try {
-                NotificationManagerCompat.from(this).cancel(dynamicIslandId)
-            } catch (_: Exception) {}
+            // Chỉ hủy thông báo Đảo nếu không còn key nào khác đang dùng chung dynamicIslandId này
+            val stillReferenced = activeDynamicIslands.values.any { it == dynamicIslandId }
+            if (!stillReferenced) {
+                IslandProbe.cancelTrack(dynamicIslandId)
+                ShizukuEngine.clearPostedActiveId(dynamicIslandId)
+                try {
+                    NotificationManagerCompat.from(this).cancel(dynamicIslandId)
+                } catch (_: Exception) {}
+            }
             idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
         }
 
@@ -330,16 +342,20 @@ class DynamicNotificationService : NotificationListenerService() {
                 val (key, islandId) = iterator.next()
                 val removedAt = intentionallyRemovedKeys[key]
                 val externalAlive = liveExternalKeys.contains(key)
-                val ownIslandAlive = liveOwnIds.contains(islandId) || (removedAt != null && now - removedAt < 2500L)
+                val ownIslandAlive = liveOwnIds.contains(islandId) || (removedAt != null && now - removedAt < 4000L)
                 if ((!externalAlive && removedAt == null) || (removedAt != null && !ownIslandAlive)) {
                     iterator.remove()
                     intentionallyRemovedKeys.remove(key)
                     activeDismissJobs.remove(key)?.cancel()
                     lastNotificationContent.remove(key)
-                    ShizukuEngine.clearPostedActiveId(islandId)
-                    try {
-                        NotificationManagerCompat.from(this).cancel(islandId)
-                    } catch (_: Exception) {}
+                    val stillReferenced = activeDynamicIslands.values.any { it == islandId }
+                    if (!stillReferenced) {
+                        IslandProbe.cancelTrack(islandId)
+                        ShizukuEngine.clearPostedActiveId(islandId)
+                        try {
+                            NotificationManagerCompat.from(this).cancel(islandId)
+                        } catch (_: Exception) {}
+                    }
                 }
             }
 
@@ -452,9 +468,15 @@ class DynamicNotificationService : NotificationListenerService() {
                 activeDynamicIslands.remove(sbn.key)
                 activeDismissJobs.remove(sbn.key)
                 if (!isPersistent) {
-                    try {
-                        NotificationManagerCompat.from(this@DynamicNotificationService).cancel(dynamicIslandId)
-                    } catch (_: Exception) {}
+                    intentionallyRemovedKeys.remove(sbn.key)
+                    val stillReferenced = activeDynamicIslands.values.any { it == dynamicIslandId }
+                    if (!stillReferenced) {
+                        IslandProbe.cancelTrack(dynamicIslandId)
+                        ShizukuEngine.clearPostedActiveId(dynamicIslandId)
+                        try {
+                            NotificationManagerCompat.from(this@DynamicNotificationService).cancel(dynamicIslandId)
+                        } catch (_: Exception) {}
+                    }
                 }
                 idleIslandManager.onEventCountChanged(activeDynamicIslands.size)
             }
@@ -464,8 +486,11 @@ class DynamicNotificationService : NotificationListenerService() {
 
     private fun cancelOriginalAndEmptyGroupSummary(sbn: StatusBarNotification) {
         val now = System.currentTimeMillis()
+        val lastRemoved = intentionallyRemovedKeys[sbn.key] ?: 0L
+        intentionallyRemovedKeys[sbn.key] = now
+        // Nếu vừa mới gọi cancelNotification(sbn.key) trong vòng 350ms (do Messenger bắn burst x2-x4), không gọi lặp lại
+        if (now - lastRemoved < 350L) return
         try {
-            intentionallyRemovedKeys[sbn.key] = now
             cancelNotification(sbn.key)
         } catch (e: Exception) {
             intentionallyRemovedKeys.remove(sbn.key)

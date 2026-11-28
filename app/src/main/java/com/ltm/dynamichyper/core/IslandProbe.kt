@@ -60,9 +60,19 @@ object IslandProbe {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val jobs = ConcurrentHashMap<Int, Job>()
     private val lastState = ConcurrentHashMap<Int, State>()
+    private val intentionallyCancelledAt = ConcurrentHashMap<Int, Long>()
 
     private val _stats = MutableStateFlow(Stats())
     val stats: StateFlow<Stats> = _stats.asStateFlow()
+
+    /**
+     * Gọi trước khi chính ứng dụng chủ động `cancel(id)` (ví dụ: ẩn Đảo chờ để nhường chỗ cho tin nhắn,
+     * thu gọn Đảo sạc sau 6s, hoặc người dùng nhấn mở Đảo) để IslandProbe không đếm nhầm là "bị hệ thống xóa".
+     */
+    fun cancelTrack(id: Int) {
+        intentionallyCancelledAt[id] = System.currentTimeMillis()
+        jobs.remove(id)?.cancel()
+    }
 
     fun labelFor(id: Int): String = when (id) {
         IdleIslandManager.IDLE_ISLAND_ID -> "đảo chờ"
@@ -82,21 +92,26 @@ object IslandProbe {
      * Chỉ phép dò mới nhất của mỗi id được tính; phép dò cũ bị thay thế.
      */
     fun track(context: Context, id: Int, path: String) {
+        intentionallyCancelledAt.remove(id)
         val app = context.applicationContext
         jobs.put(id, scope.launch {
             val label = labelFor(id)
             try {
                 delay(CHECK_EARLY_MS)
+                if (intentionallyCancelledAt.containsKey(id)) return@launch
                 val early = inspect(app, id) ?: return@launch
                 if (early != State.ALIVE) {
                     report(app, id, label, early, CHECK_EARLY_MS, path)
                     return@launch
                 }
                 delay(CHECK_FINAL_MS - CHECK_EARLY_MS)
+                if (intentionallyCancelledAt.containsKey(id)) return@launch
                 val final = inspect(app, id) ?: return@launch
                 report(app, id, label, final, CHECK_FINAL_MS, path)
             } catch (_: kotlinx.coroutines.CancellationException) {
-                _stats.update { it.copy(superseded = it.superseded + 1) }
+                if (!intentionallyCancelledAt.containsKey(id)) {
+                    _stats.update { it.copy(superseded = it.superseded + 1) }
+                }
             }
         })?.cancel()
     }
@@ -115,7 +130,11 @@ object IslandProbe {
     }
 
     private fun report(context: Context, id: Int, label: String, state: State, afterMs: Long, path: String) {
-        // Nếu đảo chờ bị ẩn do người dùng hoặc do có blocker hợp lệ thì không tính là lỗi bị hệ thống xóa
+        // Nếu thông báo vừa được chính ứng dụng chủ động hủy hoặc Đảo chờ đang tạm nhường chỗ cho blocker thì bỏ qua 100%
+        val cancelledAt = intentionallyCancelledAt[id]
+        if (cancelledAt != null && System.currentTimeMillis() - cancelledAt < 10_000L) {
+            return
+        }
         if (id == IdleIslandManager.IDLE_ISLAND_ID && state == State.GONE && IdleIslandManager.shouldSuppressIdle()) {
             return
         }

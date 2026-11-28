@@ -234,6 +234,7 @@ class RingerIslandManager(
     fun collapseToAppropriateState() {
         autoCollapseJob?.cancel()
         autoCollapseJob = null
+        com.ltm.dynamichyper.core.IslandProbe.cancelTrack(RINGER_NOTIFICATION_ID)
         ShizukuEngine.clearPostedActiveId(RINGER_NOTIFICATION_ID)
         try {
             NotificationManagerCompat.from(context).cancel(RINGER_NOTIFICATION_ID)

@@ -88,6 +88,7 @@ class IdleIslandManager(
 
         fun hideIdleIsland(context: Context) {
             try {
+                com.ltm.dynamichyper.core.IslandProbe.cancelTrack(IDLE_ISLAND_ID)
                 ShizukuEngine.clearPostedActiveId(IDLE_ISLAND_ID)
                 NotificationManagerCompat.from(context).cancel(IDLE_ISLAND_ID)
             } catch (e: Exception) {

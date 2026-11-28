@@ -414,6 +414,7 @@ class ChargingIslandManager(
         autoCollapseJob?.cancel()
         autoCollapseJob = null
         isChargingIslandShowing = false
+        com.ltm.dynamichyper.core.IslandProbe.cancelTrack(CHARGING_NOTIFICATION_ID)
         ShizukuEngine.clearPostedActiveId(CHARGING_NOTIFICATION_ID)
         try {
             NotificationManagerCompat.from(context).cancel(CHARGING_NOTIFICATION_ID)

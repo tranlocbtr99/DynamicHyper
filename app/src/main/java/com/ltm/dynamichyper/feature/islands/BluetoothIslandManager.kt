@@ -315,6 +315,7 @@ class BluetoothIslandManager(
     fun collapseToAppropriateState() {
         autoCollapseJob?.cancel()
         autoCollapseJob = null
+        com.ltm.dynamichyper.core.IslandProbe.cancelTrack(BLUETOOTH_NOTIFICATION_ID)
         ShizukuEngine.clearPostedActiveId(BLUETOOTH_NOTIFICATION_ID)
         try {
             NotificationManagerCompat.from(context).cancel(BLUETOOTH_NOTIFICATION_ID)
